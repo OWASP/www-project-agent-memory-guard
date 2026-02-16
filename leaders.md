@@ -1,4 +1,2 @@
 ### Leaders
-* [Leader Name](mailto:leader.email@owasp.org)
-* [Leader Name](mailto:leader.email@owasp.org)
-* [Leader Name](mailto:leader.email@owasp.org)
+* [Vaishnavi Gudur](mailto:[vaishnavi.gudur@owasp.org|mailto:vaishnavi.gudur@owasp.org])
