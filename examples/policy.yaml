@@ -1,0 +1,31 @@
+version: 1
+default_action: allow
+
+protected_keys:
+  - system.*
+  - identity.role
+
+immutable_keys:
+  - identity.user_id
+
+rules:
+  - name: block_prompt_injection
+    on: prompt_injection
+    action: block
+
+  - name: redact_sensitive_data
+    on: sensitive_data
+    action: redact
+
+  - name: block_protected_key_writes
+    on: protected_key
+    action: block
+
+  - name: quarantine_size_anomaly
+    on: size_anomaly
+    action: quarantine
+    min_severity: medium
+
+  - name: quarantine_rapid_change
+    on: rapid_change
+    action: quarantine
