@@ -2,3 +2,12 @@
 /Gemfile.lock
 /favicon.ico
 _site/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
