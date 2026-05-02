@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install ruff mypy coverage
+
+      - name: Lint with ruff
+        run: |
+          ruff check src/ tests/
+
+      - name: Type check with mypy
+        run: |
+          mypy src/agent_memory_guard --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Run tests with coverage
+        run: |
+          coverage run -m pytest tests/ -v
+          coverage report --fail-under=85
+          coverage xml
+
+      - name: Upload coverage report
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml

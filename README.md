@@ -1,5 +1,12 @@
 # OWASP Agent Memory Guard
 
+[![CI](https://github.com/OWASP/www-project-agent-memory-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/OWASP/www-project-agent-memory-guard/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/agent-memory-guard.svg)](https://pepy.tech/project/agent-memory-guard)
+[![Python versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.md)
+[![OWASP Lab](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
+
 Runtime defense layer that protects AI agents from **memory poisoning** —
 the corruption of persistent agent memory that leads to misalignment, data
 exfiltration, and malicious behavior across sessions.
@@ -112,6 +119,19 @@ history = GuardedChatMessageHistory(
 - **Q3 2026** — v0.4.0: ML-based anomaly detection, vector-store
   protection, real-time dashboard.
 - **Q4 2026** — v1.0.0: multi-agent security, Lab promotion.
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+Looking for a place to start? Check out issues labeled
+[`good first issue`](https://github.com/OWASP/www-project-agent-memory-guard/labels/good%20first%20issue)
+or [`help wanted`](https://github.com/OWASP/www-project-agent-memory-guard/labels/help%20wanted).
+
+## Security
+
+If you discover a security vulnerability, please follow our
+[security policy](SECURITY.md) for responsible disclosure.
 
 ## License
 
