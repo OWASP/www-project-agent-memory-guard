@@ -21,18 +21,18 @@ try:  # pragma: no cover - optional dependency
 
     _HAS_LANGCHAIN = True
 except Exception:  # pragma: no cover - optional dependency
-    BaseChatMessageHistory = object  # type: ignore[assignment, misc]
-    BaseMessage = Any  # type: ignore[assignment, misc]
+    BaseChatMessageHistory = object  # type: ignore[assignment, misc, unused-ignore]
+    BaseMessage = Any  # type: ignore[assignment, misc, unused-ignore]
     _HAS_LANGCHAIN = False
 
-    def messages_from_dict(d):  # type: ignore[no-redef]
+    def messages_from_dict(d: list[dict[str, Any]]) -> list[Any]:  # type: ignore[no-redef, unused-ignore]
         return list(d)
 
-    def messages_to_dict(m):  # type: ignore[no-redef]
+    def messages_to_dict(m: list[Any]) -> list[dict[str, Any]]:  # type: ignore[no-redef, unused-ignore]
         return list(m)
 
 
-class GuardedChatMessageHistory(BaseChatMessageHistory):  # type: ignore[misc, valid-type]
+class GuardedChatMessageHistory(BaseChatMessageHistory):  # type: ignore[misc, valid-type, unused-ignore]
     """Chat history whose messages are screened by a MemoryGuard before storage.
 
     Each message is written under the key ``messages.<session_id>.<index>``,
@@ -91,6 +91,6 @@ class GuardedChatMessageHistory(BaseChatMessageHistory):  # type: ignore[misc, v
                 pass
         self.guard.write(self._index_key, 0, source="langchain")
 
-    def _iter_store(self):
+    def _iter_store(self) -> list[tuple[str, Any]]:
         store = self.guard._store  # noqa: SLF001 - intentional internal access
         return list(store.items())
