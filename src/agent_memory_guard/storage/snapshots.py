@@ -29,7 +29,7 @@ class SnapshotStore:
         if max_snapshots < 1:
             raise ValueError("max_snapshots must be >= 1")
         self._max = max_snapshots
-        self._snapshots: "OrderedDict[str, Snapshot]" = OrderedDict()
+        self._snapshots: OrderedDict[str, Snapshot] = OrderedDict()
 
     def __len__(self) -> int:
         return len(self._snapshots)

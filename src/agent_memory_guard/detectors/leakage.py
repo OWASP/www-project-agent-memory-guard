@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
 from agent_memory_guard.detectors.injection import _stringify
 from agent_memory_guard.events import Severity
-
 
 DEFAULT_LEAKAGE_PATTERNS: dict[str, str] = {
     "aws_access_key": r"\bAKIA[0-9A-Z]{16}\b",

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import fnmatch
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
 from agent_memory_guard.events import Severity

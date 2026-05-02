@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Iterable
+from collections.abc import Iterable
+from typing import Any, Callable
 
-from agent_memory_guard.detectors.base import Detector, DetectionResult
 from agent_memory_guard.detectors.anomaly import (
     RapidChangeDetector,
     SizeAnomalyDetector,
 )
+from agent_memory_guard.detectors.base import DetectionResult, Detector
 from agent_memory_guard.detectors.injection import PromptInjectionDetector
 from agent_memory_guard.detectors.leakage import SensitiveDataDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
@@ -18,7 +19,6 @@ from agent_memory_guard.integrity import IntegrityRegistry, hash_value
 from agent_memory_guard.policies.policy import Policy, merge_protected_keys
 from agent_memory_guard.storage.memory_store import InMemoryStore, MemoryStore
 from agent_memory_guard.storage.snapshots import Snapshot, SnapshotStore
-
 
 log = logging.getLogger("agent_memory_guard")
 

@@ -1,7 +1,7 @@
 import pytest
 
 from agent_memory_guard import MemoryGuard, Policy
-from agent_memory_guard.events import Action, Severity
+from agent_memory_guard.events import Action
 from agent_memory_guard.exceptions import IntegrityError, PolicyViolation
 from agent_memory_guard.storage import InMemoryStore
 

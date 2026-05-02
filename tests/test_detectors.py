@@ -1,9 +1,9 @@
 from agent_memory_guard.detectors import (
     PromptInjectionDetector,
+    ProtectedKeyDetector,
+    RapidChangeDetector,
     SensitiveDataDetector,
     SizeAnomalyDetector,
-    RapidChangeDetector,
-    ProtectedKeyDetector,
 )
 
 

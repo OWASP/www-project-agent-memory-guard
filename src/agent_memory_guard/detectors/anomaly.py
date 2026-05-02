@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Any, Deque
+from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
 from agent_memory_guard.detectors.injection import _stringify
@@ -64,7 +64,7 @@ class RapidChangeDetector:
     ) -> None:
         self._window = window_seconds
         self._max = max_writes
-        self._writes: dict[str, Deque[float]] = {}
+        self._writes: dict[str, deque[float]] = {}
         self._severity = severity
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:

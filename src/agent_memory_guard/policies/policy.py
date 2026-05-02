@@ -22,14 +22,14 @@ Example policy:
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
 from agent_memory_guard.events import Action, Severity
-
 
 _VALID_ACTIONS = {a.value for a in Action}
 
@@ -69,7 +69,7 @@ class Policy:
         return self.default_action
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Policy":
+    def from_dict(cls, data: dict[str, Any]) -> Policy:
         rules = [_parse_rule(r) for r in data.get("rules", [])]
         return cls(
             version=int(data.get("version", 1)),
@@ -80,11 +80,11 @@ class Policy:
         )
 
     @classmethod
-    def permissive(cls) -> "Policy":
+    def permissive(cls) -> Policy:
         return cls(default_action=Action.ALLOW)
 
     @classmethod
-    def strict(cls) -> "Policy":
+    def strict(cls) -> Policy:
         return cls(
             default_action=Action.ALLOW,
             rules=[

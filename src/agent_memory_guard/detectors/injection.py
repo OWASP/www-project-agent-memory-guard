@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
 from agent_memory_guard.events import Severity
-
 
 DEFAULT_INJECTION_PATTERNS: tuple[str, ...] = (
     r"ignore (?:all |any |the )?(?:previous|prior|above) (?:instructions|messages|rules)",

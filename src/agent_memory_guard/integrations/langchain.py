@@ -11,10 +11,13 @@ from agent_memory_guard.events import Action
 from agent_memory_guard.exceptions import PolicyViolation
 from agent_memory_guard.guard import MemoryGuard
 
-
 try:  # pragma: no cover - optional dependency
     from langchain_core.chat_history import BaseChatMessageHistory  # type: ignore
-    from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict  # type: ignore
+    from langchain_core.messages import (  # type: ignore
+        BaseMessage,
+        messages_from_dict,
+        messages_to_dict,
+    )
 
     _HAS_LANGCHAIN = True
 except Exception:  # pragma: no cover - optional dependency
