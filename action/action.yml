@@ -1,0 +1,87 @@
+name: 'OWASP Agent Memory Guard Scan'
+description: 'Scan AI agent code for memory poisoning vulnerabilities (OWASP ASI06). Detects prompt injection, secret leakage, protected key tampering, and size anomalies in agent memory operations.'
+author: 'OWASP Agent Memory Guard Project'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  scan-path:
+    description: 'Path to scan for agent memory operations (default: entire repo)'
+    required: false
+    default: '.'
+  policy:
+    description: 'Security policy level: strict, moderate, or path to custom policy YAML'
+    required: false
+    default: 'strict'
+  fail-on-findings:
+    description: 'Fail the workflow if vulnerabilities are found'
+    required: false
+    default: 'true'
+  include-patterns:
+    description: 'Comma-separated glob patterns for files to include (e.g., "**/*.py,**/*.js")'
+    required: false
+    default: '**/*.py'
+  exclude-patterns:
+    description: 'Comma-separated glob patterns for files to exclude'
+    required: false
+    default: '**/test*/**,**/node_modules/**,**/.venv/**'
+  min-severity:
+    description: 'Minimum severity to report: low, medium, high, critical'
+    required: false
+    default: 'medium'
+  output-format:
+    description: 'Output format: text, json, sarif'
+    required: false
+    default: 'text'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+
+outputs:
+  findings-count:
+    description: 'Total number of findings detected'
+  critical-count:
+    description: 'Number of critical severity findings'
+  high-count:
+    description: 'Number of high severity findings'
+  report-path:
+    description: 'Path to the generated report file'
+  sarif-path:
+    description: 'Path to SARIF output (for GitHub Security tab integration)'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Agent Memory Guard
+      shell: bash
+      run: |
+        pip install agent-memory-guard
+
+    - name: Run Memory Security Scan
+      id: scan
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.scan-path }}
+        POLICY: ${{ inputs.policy }}
+        INCLUDE_PATTERNS: ${{ inputs.include-patterns }}
+        EXCLUDE_PATTERNS: ${{ inputs.exclude-patterns }}
+        MIN_SEVERITY: ${{ inputs.min-severity }}
+        OUTPUT_FORMAT: ${{ inputs.output-format }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        python ${{ github.action_path }}/scan.py
+
+    - name: Upload SARIF to GitHub Security
+      if: inputs.output-format == 'sarif' && always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
+      continue-on-error: true
