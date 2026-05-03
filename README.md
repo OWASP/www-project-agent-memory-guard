@@ -96,6 +96,39 @@ history = GuardedChatMessageHistory(
 )
 ```
 
+## Security Benchmark Results
+
+Tested against 55 real-world attack payloads across 4 threat categories:
+
+| Metric | Value |
+|--------|-------|
+| **Detection Rate (Recall)** | 92.5% |
+| **Precision** | 100% |
+| **False Positive Rate** | 0% |
+| **Median Latency** | 59 µs |
+| **F1 Score** | 0.961 |
+
+| Attack Category | Detection Rate |
+|----------------|---------------|
+| Prompt Injection | 100% (15/15) |
+| Protected Key Tampering | 100% (8/8) |
+| Sensitive Data Leakage | 83% (10/12) |
+| Size Anomaly | 80% (4/5) |
+
+![Benchmark Dashboard](benchmarks/results/benchmark_dashboard.png)
+
+Run the benchmark yourself:
+```bash
+python benchmarks/security_benchmark.py
+```
+
+## Interactive Demo
+
+See attacks being blocked in real-time:
+```bash
+python examples/interactive_demo.py
+```
+
 ## Architecture
 
 ```
