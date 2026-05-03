@@ -6,15 +6,13 @@ Scans Python source files for potential memory poisoning vulnerabilities
 in AI agent code. Used by the GitHub Action and as a standalone CLI tool.
 
 Detects:
-- Unguarded memory write operations
-- Hardcoded secrets in memory operations
-- Missing input validation before memory storage
-- Prompt injection patterns in string literals
-- Unsafe deserialization into memory stores
+- Unguarded memory write operations (AMG001)
+- Hardcoded secrets that could be exfiltrated via memory poisoning (AMG002)
+- Prompt injection patterns in string literals stored to memory (AMG003)
+- Unsafe deserialization into memory stores (AMG004)
 """
 from __future__ import annotations
 
-import ast
 import json
 import os
 import re
@@ -129,12 +127,10 @@ class MemorySecurityScanner:
 
     def __init__(
         self,
-        policy: str = "strict",
         min_severity: Severity = Severity.MEDIUM,
         include_patterns: list[str] | None = None,
         exclude_patterns: list[str] | None = None,
     ):
-        self.policy = policy
         self.min_severity = min_severity
         self.include_patterns = include_patterns or ["**/*.py"]
         self.exclude_patterns = exclude_patterns or ["**/test*/**", "**/node_modules/**", "**/.venv/**"]
@@ -405,7 +401,6 @@ def main() -> None:
     """Main entry point for the GitHub Action."""
     # Read inputs from environment
     scan_path = Path(os.environ.get("SCAN_PATH", "."))
-    policy = os.environ.get("POLICY", "strict")
     include_raw = os.environ.get("INCLUDE_PATTERNS", "**/*.py")
     exclude_raw = os.environ.get("EXCLUDE_PATTERNS", "**/test*/**,**/node_modules/**,**/.venv/**")
     min_severity_str = os.environ.get("MIN_SEVERITY", "medium")
@@ -418,7 +413,6 @@ def main() -> None:
 
     # Run scan
     scanner = MemorySecurityScanner(
-        policy=policy,
         min_severity=min_severity,
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,

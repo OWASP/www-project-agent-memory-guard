@@ -22,7 +22,6 @@ jobs:
         uses: OWASP/www-project-agent-memory-guard/action@main
         with:
           scan-path: '.'
-          policy: 'strict'
           fail-on-findings: 'true'
           output-format: 'sarif'
 ```
@@ -41,7 +40,6 @@ jobs:
 | Input | Description | Default |
 |-------|-------------|---------|
 | `scan-path` | Path to scan | `.` |
-| `policy` | Security policy: `strict`, `moderate`, or path to YAML | `strict` |
 | `fail-on-findings` | Fail workflow on findings | `true` |
 | `include-patterns` | Glob patterns to include | `**/*.py` |
 | `exclude-patterns` | Glob patterns to exclude | `**/test*/**,**/node_modules/**` |

@@ -165,8 +165,6 @@ class MemoryGuard:
 
         self._store.set(key, committed_value)
 
-        if any(self._protected_detector.matches(key) for _ in [0]):  # touch matcher
-            pass
         if key in self._policy.immutable_keys and not self._integrity.has_baseline(key):
             self._integrity.baseline(key, committed_value)
 

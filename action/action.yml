@@ -11,10 +11,6 @@ inputs:
     description: 'Path to scan for agent memory operations (default: entire repo)'
     required: false
     default: '.'
-  policy:
-    description: 'Security policy level: strict, moderate, or path to custom policy YAML'
-    required: false
-    default: 'strict'
   fail-on-findings:
     description: 'Fail the workflow if vulnerabilities are found'
     required: false
@@ -70,7 +66,6 @@ runs:
       shell: bash
       env:
         SCAN_PATH: ${{ inputs.scan-path }}
-        POLICY: ${{ inputs.policy }}
         INCLUDE_PATTERNS: ${{ inputs.include-patterns }}
         EXCLUDE_PATTERNS: ${{ inputs.exclude-patterns }}
         MIN_SEVERITY: ${{ inputs.min-severity }}

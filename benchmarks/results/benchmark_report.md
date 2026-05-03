@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Agent Memory Guard achieves **92% detection rate** (recall) with **100% precision** across 55 test cases spanning 5 attack categories, while adding only **59 µs median latency** per memory operation.
+Agent Memory Guard achieves **92% detection rate** (recall) with **100% precision** across 55 test cases spanning 5 attack categories, while adding only **62 µs median latency** per memory operation.
 
 | Metric | Value |
 |--------|-------|
@@ -49,11 +49,11 @@ Agent Memory Guard achieves **92% detection rate** (recall) with **100% precisio
 
 | Metric | Value |
 |--------|-------|
-| **Median latency** | 59 µs |
-| **Mean latency** | 1805 µs |
-| **P95 latency** | 15245 µs |
-| **P99 latency** | 25188 µs |
-| **Max latency** | 31026 µs |
+| **Median latency** | 62 µs |
+| **Mean latency** | 2113 µs |
+| **P95 latency** | 18561 µs |
+| **P99 latency** | 28719 µs |
+| **Max latency** | 34301 µs |
 
 The overhead is negligible for typical agent operations (< 1ms per read/write).
 
