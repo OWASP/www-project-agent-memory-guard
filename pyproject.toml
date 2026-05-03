@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-memory-guard"
-version = "0.2.1"
+version = "0.2.2"
 description = "Runtime defense layer that protects AI agent memory from poisoning attacks (OWASP ASI06)."
 readme = "README.md"
 license = { text = "Apache-2.0" }

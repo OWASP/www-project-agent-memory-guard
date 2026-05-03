@@ -9,7 +9,7 @@ from agent_memory_guard.exceptions import (
 from agent_memory_guard.guard import MemoryGuard
 from agent_memory_guard.policies.policy import Policy
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "MemoryGuard",
