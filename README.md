@@ -124,7 +124,9 @@ python benchmarks/security_benchmark.py
 
 ## Interactive Demo
 
-See attacks being blocked in real-time:
+[![asciicast](https://asciinema.org/a/rKOZYi3t1OMTgw7j.svg)](https://asciinema.org/a/rKOZYi3t1OMTgw7j)
+
+Run it locally:
 ```bash
 python examples/interactive_demo.py
 ```
