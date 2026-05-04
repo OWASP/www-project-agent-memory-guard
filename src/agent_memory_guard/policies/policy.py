@@ -106,11 +106,12 @@ def _parse_action(value: Any) -> Action:
     return Action(text)
 
 
-def _parse_rule(raw: dict[str, Any]) -> PolicyRule:
+def _parse_rule(raw: dict[str | bool, Any]) -> PolicyRule:
     # YAML 1.1 parses unquoted `on` as the boolean True; remap it to the
     # intended string key so users can write natural policy files.
     if True in raw and "on" not in raw:
-        raw = {**raw, "on": raw[True]}
+        raw_str: dict[str | bool, Any] = {**raw, "on": raw[True]}
+        raw = raw_str
     if "name" not in raw or "action" not in raw:
         raise ValueError(f"Policy rule missing required fields: {raw!r}")
     keys = raw.get("keys") or ()
