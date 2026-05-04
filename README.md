@@ -151,15 +151,6 @@ Run the benchmark yourself:
 python benchmarks/security_benchmark.py
 ```
 
-## Interactive Demo
-
-![OWASP Agent Memory Guard — Live Attack Demo](assets/demo.gif)
-
-Run it locally:
-```bash
-python examples/interactive_demo.py
-```
-
 ## Architecture
 
 ```
