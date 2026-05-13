@@ -5,16 +5,26 @@ import logging
 from collections.abc import Iterable
 from typing import Any, Callable
 
+from agent_memory_guard.classification import (
+    ClassificationRegistry,
+    MemoryClass,
+    PromotionRules,
+)
 from agent_memory_guard.detectors.anomaly import (
     RapidChangeDetector,
     SizeAnomalyDetector,
 )
 from agent_memory_guard.detectors.base import DetectionResult, Detector
+from agent_memory_guard.detectors.cross_task import CrossTaskContaminationDetector
 from agent_memory_guard.detectors.injection import PromptInjectionDetector
 from agent_memory_guard.detectors.leakage import SensitiveDataDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
 from agent_memory_guard.events import Action, SecurityEvent, Severity
-from agent_memory_guard.exceptions import IntegrityError, PolicyViolation
+from agent_memory_guard.exceptions import (
+    ClassificationError,
+    IntegrityError,
+    PolicyViolation,
+)
 from agent_memory_guard.integrity import IntegrityRegistry, hash_value
 from agent_memory_guard.policies.policy import Policy, merge_protected_keys
 from agent_memory_guard.storage.memory_store import InMemoryStore, MemoryStore
@@ -43,6 +53,8 @@ class MemoryGuard:
         snapshots: SnapshotStore | None = None,
         event_handlers: Iterable[EventHandler] = (),
         snapshot_on_block: bool = True,
+        promotion_rules: PromotionRules | None = None,
+        current_task: str | None = None,
     ) -> None:
         self._store: MemoryStore = store if store is not None else InMemoryStore()
         self._policy = policy or Policy.permissive()
@@ -52,9 +64,15 @@ class MemoryGuard:
         self._events: list[SecurityEvent] = []
         self._snapshot_on_block = snapshot_on_block
         self._quarantine: dict[str, Any] = {}
+        self._classification = ClassificationRegistry()
+        self._promotion_rules = promotion_rules or PromotionRules()
+        self._current_task = current_task
 
         protected = merge_protected_keys(self._policy)
         self._protected_detector = ProtectedKeyDetector(protected)
+        self._cross_task_detector = CrossTaskContaminationDetector(
+            self._classification, current_task=current_task
+        )
 
         if detectors is None:
             self._detectors: list[Detector] = [
@@ -63,11 +81,16 @@ class MemoryGuard:
                 SizeAnomalyDetector(),
                 RapidChangeDetector(),
                 self._protected_detector,
+                self._cross_task_detector,
             ]
         else:
             self._detectors = list(detectors)
             if not any(isinstance(d, ProtectedKeyDetector) for d in self._detectors):
                 self._detectors.append(self._protected_detector)
+            if not any(
+                isinstance(d, CrossTaskContaminationDetector) for d in self._detectors
+            ):
+                self._detectors.append(self._cross_task_detector)
 
         for key in self._policy.immutable_keys:
             if key in self._store:
@@ -113,8 +136,142 @@ class MemoryGuard:
                 drifted.append(key)
         return drifted
 
-    def write(self, key: str, value: Any, *, source: str = "agent") -> Action:
-        """Inspect and (if policy allows) commit a write. Returns the action taken."""
+    @property
+    def current_task(self) -> str | None:
+        return self._current_task
+
+    def set_current_task(self, task_id: str | None) -> None:
+        """Switch the task context used for cross-task contamination checks."""
+        self._current_task = task_id
+        self._cross_task_detector.set_current_task(task_id)
+
+    def classify(self, key: str) -> MemoryClass | None:
+        return self._classification.get(key)
+
+    def origin_task(self, key: str) -> str | None:
+        return self._classification.task_of(key)
+
+    def promote(
+        self,
+        key: str,
+        target: MemoryClass,
+        *,
+        verified: bool = False,
+        verified_by: str | None = None,
+    ) -> None:
+        """Move `key` to a new class. Enforces the promotion graph.
+
+        Promotions that `requires_verification` (e.g. user_preference_candidate
+        -> verified_preference) must pass `verified=True`. This is the user
+        opt-in step that prevents an ephemeral request from silently becoming
+        a durable preference.
+        """
+        current = self._classification.get(key)
+        if current is None:
+            raise ClassificationError(
+                f"Cannot promote unclassified key '{key}'",
+                key=key,
+                target_class=target.value,
+            )
+        if current == target:
+            return
+        edge = self._promotion_rules.edge(current, target)
+        if edge is None:
+            self._emit(
+                detector="classification",
+                severity=Severity.HIGH,
+                action=Action.BLOCK,
+                operation="promote",
+                key=key,
+                message=(
+                    f"Illegal promotion {current.value} -> {target.value} on '{key}'"
+                ),
+                metadata={"from": current.value, "to": target.value},
+            )
+            raise ClassificationError(
+                f"Promotion {current.value} -> {target.value} is not allowed",
+                key=key,
+                source_class=current.value,
+                target_class=target.value,
+            )
+        if edge.requires_verification and not verified:
+            self._emit(
+                detector="classification",
+                severity=Severity.HIGH,
+                action=Action.BLOCK,
+                operation="promote",
+                key=key,
+                message=(
+                    f"Promotion {current.value} -> {target.value} requires verification"
+                ),
+                metadata={"from": current.value, "to": target.value},
+            )
+            raise ClassificationError(
+                f"Promotion {current.value} -> {target.value} requires verified=True",
+                key=key,
+                source_class=current.value,
+                target_class=target.value,
+            )
+        self._classification.set(
+            key, target, task_id=self._classification.task_of(key)
+        )
+        self._emit(
+            detector="classification",
+            severity=Severity.INFO,
+            action=Action.ALLOW,
+            operation="promote",
+            key=key,
+            message=f"Promoted {current.value} -> {target.value}",
+            metadata={
+                "from": current.value,
+                "to": target.value,
+                "verified": verified,
+                "verified_by": verified_by,
+            },
+        )
+
+    def write(
+        self,
+        key: str,
+        value: Any,
+        *,
+        source: str = "agent",
+        cls: MemoryClass | str | None = None,
+        task_id: str | None = None,
+    ) -> Action:
+        """Inspect and (if policy allows) commit a write. Returns the action taken.
+
+        Pass `cls=MemoryClass.X` to label the entry with a provenance class.
+        Re-writes to an already-classified key must keep the same class —
+        promotion is only available through :meth:`promote`. This prevents an
+        untrusted source (e.g. a tool result) from silently overwriting a
+        trusted entry (e.g. verified_preference or policy).
+        """
+        if cls is not None:
+            target_class = MemoryClass(cls) if not isinstance(cls, MemoryClass) else cls
+            existing = self._classification.get(key)
+            if existing is not None and existing != target_class:
+                self._emit(
+                    detector="classification",
+                    severity=Severity.HIGH,
+                    action=Action.BLOCK,
+                    operation="write",
+                    key=key,
+                    message=(
+                        f"Write would reclassify '{key}': {existing.value} -> "
+                        f"{target_class.value}; use promote() instead"
+                    ),
+                    metadata={"from": existing.value, "to": target_class.value},
+                )
+                raise ClassificationError(
+                    f"Cannot reclassify '{key}' on write; use promote()",
+                    key=key,
+                    source_class=existing.value,
+                    target_class=target_class.value,
+                )
+        else:
+            target_class = self._classification.get(key)
+
         committed_value = value
         verdicts = self._run_detectors(key, value, operation="write")
         worst = _highest_severity(verdicts)
@@ -165,6 +322,14 @@ class MemoryGuard:
 
         self._store.set(key, committed_value)
 
+        if target_class is not None:
+            existing_task = self._classification.task_of(key)
+            self._classification.set(
+                key,
+                target_class,
+                task_id=task_id if task_id is not None else existing_task or self._current_task,
+            )
+
         if key in self._policy.immutable_keys and not self._integrity.has_baseline(key):
             self._integrity.baseline(key, committed_value)
 
@@ -176,7 +341,7 @@ class MemoryGuard:
                 operation="write",
                 key=key,
                 message=_combined_message(verdicts) or "Write allowed with findings",
-                metadata={"source": source},
+                metadata={"source": source, **_merged_metadata(verdicts)},
             )
         return decision
 
@@ -235,7 +400,7 @@ class MemoryGuard:
                 operation="read",
                 key=key,
                 message=_combined_message(verdicts) or "Read allowed with findings",
-                metadata={"sink": sink},
+                metadata={"sink": sink, **_merged_metadata(verdicts)},
             )
         return value
 
@@ -252,6 +417,7 @@ class MemoryGuard:
             raise PolicyViolation(f"Delete of '{key}' blocked", key=key)
         self._store.delete(key)
         self._integrity.clear(key)
+        self._classification.clear(key)
 
     # ---- snapshots ----------------------------------------------------
 
@@ -386,6 +552,14 @@ def _blocking_detector(verdicts: list[DetectionResult]) -> str:
 
 def _combined_message(verdicts: list[DetectionResult]) -> str:
     return "; ".join(v.message for v in verdicts if v.message)
+
+
+def _merged_metadata(verdicts: list[DetectionResult]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for v in verdicts:
+        if v.metadata:
+            merged.update(v.metadata)
+    return merged
 
 
 __all__ = ["MemoryGuard", "hash_value"]

@@ -22,3 +22,24 @@ class IntegrityError(MemoryGuardError):
         self.key = key
         self.expected = expected
         self.actual = actual
+
+
+class ClassificationError(MemoryGuardError):
+    """Raised on illegal class transitions or cross-task contamination."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        key: str,
+        source_class: str | None = None,
+        target_class: str | None = None,
+        origin_task: str | None = None,
+        current_task: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.key = key
+        self.source_class = source_class
+        self.target_class = target_class
+        self.origin_task = origin_task
+        self.current_task = current_task
