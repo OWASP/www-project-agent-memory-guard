@@ -11,3 +11,4 @@ __pycache__/
 .venv/
 build/
 dist/
+venv-www-project-agent-memory-guard/
