@@ -5,7 +5,7 @@ poisoning attacks in group chat scenarios.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from agent_memory_guard.events import Action
 from agent_memory_guard.exceptions import PolicyViolation
@@ -26,7 +26,7 @@ class GuardedAutoGenAgent:
     def __init__(
         self,
         agent: Any,
-        guard: Optional[MemoryGuard] = None,
+        guard: MemoryGuard | None = None,
         *,
         drop_blocked: bool = True,
     ) -> None:
@@ -41,7 +41,9 @@ class GuardedAutoGenAgent:
     def screen_message(self, message: dict, source: str) -> bool:
         """Screen a message before send/receive."""
         msg_id = f"autogen.{self._agent.name}.msg.{self._message_count}"
-        payload = str(message)
+        payload = (
+            message.get("content", "") if isinstance(message, dict) else str(message)
+        )
         try:
             decision = self.guard.write(msg_id, payload, source=source)
         except PolicyViolation:
@@ -74,13 +76,10 @@ class GuardedGroupChatManager:
     def __init__(
         self,
         group_chat: Any,
-        guard: Optional[MemoryGuard] = None,
-        *,
-        agent_isolation: bool = True,
+        guard: MemoryGuard | None = None,
     ) -> None:
         self._group_chat = group_chat
         self.guard = guard or MemoryGuard()
-        self._agent_isolation = agent_isolation
         self._agent_keys: dict[str, set[str]] = {}
 
     def __getattr__(self, name: str) -> Any:

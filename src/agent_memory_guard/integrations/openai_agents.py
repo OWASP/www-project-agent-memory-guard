@@ -5,7 +5,7 @@ from memory poisoning attacks.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from agent_memory_guard.events import Action
 from agent_memory_guard.exceptions import PolicyViolation
@@ -18,7 +18,7 @@ class GuardedAgentContext:
     def __init__(
         self,
         context: Any,
-        guard: Optional[MemoryGuard] = None,
+        guard: MemoryGuard | None = None,
         *,
         drop_blocked: bool = True,
     ) -> None:
@@ -40,20 +40,19 @@ class GuardedAgentContext:
         if decision == Action.QUARANTINE:
             return False
         if hasattr(self._context, "set_state"):
-            self._context.set_state(key, value)
+            committed = self.guard.read(full_key, sink="openai_agents")
+            self._context.set_state(key, committed)
         return True
 
-    def get_state(self, key: str) -> Any:
+    def get_state(self, key: str, default: Any = None) -> Any:
         full_key = f"openai_agents.state.{key}"
-        try:
-            cached = self.guard.read(full_key, sink="openai_agents")
-            if cached is not None:
-                return cached
-        except PolicyViolation:
-            pass
+        sentinel = object()
+        cached = self.guard.read(full_key, default=sentinel, sink="openai_agents")
+        if cached is not sentinel:
+            return cached
         if hasattr(self._context, "get_state"):
             return self._context.get_state(key)
-        return None
+        return default
 
 
 class GuardedToolOutput:
@@ -61,7 +60,7 @@ class GuardedToolOutput:
 
     def __init__(
         self,
-        guard: Optional[MemoryGuard] = None,
+        guard: MemoryGuard | None = None,
         *,
         drop_blocked: bool = True,
     ) -> None:
@@ -86,7 +85,7 @@ class GuardedHandoff:
 
     def __init__(
         self,
-        guard: Optional[MemoryGuard] = None,
+        guard: MemoryGuard | None = None,
         *,
         from_agent: str = "unknown",
         to_agent: str = "unknown",
