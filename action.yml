@@ -1,0 +1,40 @@
+name: 'Agent Memory Guard Scanner'
+description: 'Scan AI agent projects for memory poisoning vulnerabilities'
+author: 'OWASP Agent Memory Guard'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  policy:
+    description: 'Policy level (strict, moderate, basic)'
+    required: false
+    default: 'moderate'
+  fail-on:
+    description: 'Fail threshold (high, medium, low)'
+    required: false
+    default: 'high'
+  path:
+    description: 'Path to scan'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Agent Memory Guard Scanner
+      shell: bash
+      run: |
+        pip install -q pyyaml
+        python ${{ github.action_path }}/scanner/scan.py \
+          --path "${{ inputs.path }}" \
+          --policy "${{ inputs.policy }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          --output sarif \
+          --output-file results.sarif
+
+    - name: Upload SARIF results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
