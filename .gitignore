@@ -11,3 +11,7 @@ __pycache__/
 .venv/
 build/
 dist/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
