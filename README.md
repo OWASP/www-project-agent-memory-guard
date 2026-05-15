@@ -1,11 +1,16 @@
 # OWASP Agent Memory Guard
 
-[![PyPI version](https://badge.fury.io/py/agent-memory-guard.svg)](https://badge.fury.io/py/agent-memory-guard)
-[![Downloads](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard)
-[![Python Versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
+<div align="center">
 
-> **⭐ If you find this project useful for securing your AI agents, please consider giving it a star on GitHub! It helps others discover the project.**
+### 📦 1,780+ Total Downloads & Clones
 
+[![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/github_clones-890-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
+
+**Total Downloads = [PyPI: agent-memory-guard](https://pepy.tech/project/agent-memory-guard) + [PyPI: langchain-agent-memory-guard](https://pepy.tech/project/langchain-agent-memory-guard) + [GitHub Clones](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)**
+
+</div>
+
+---
 
 [![CI](https://github.com/OWASP/www-project-agent-memory-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/OWASP/www-project-agent-memory-guard/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
@@ -13,6 +18,8 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.md)
 [![OWASP Incubator](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
+
+> **⭐ If you find this project useful for securing your AI agents, please consider giving it a star on GitHub! It helps others discover the project.**
 
 > **Stop AI agents from being weaponized through their own memory.**
 
@@ -48,10 +55,6 @@ Tested against 55 real-world attack payloads across 4 threat categories:
 | Protected key tampering | 100% (8/8) |
 | Sensitive data leakage | 83% (10/12) |
 | Size anomaly | 80% (4/5) |
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=OWASP/www-project-agent-memory-guard&type=Date)](https://star-history.com/#OWASP/www-project-agent-memory-guard&Date)
 
 Reproduce locally:
 
