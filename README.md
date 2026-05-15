@@ -1,16 +1,14 @@
 # OWASP Agent Memory Guard
 
 [![PyPI version](https://badge.fury.io/py/agent-memory-guard.svg)](https://badge.fury.io/py/agent-memory-guard)
-[![Downloads](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard)
+[![Total Downloads](https://static.pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard)
 [![Python Versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 
 > **⭐ If you find this project useful for securing your AI agents, please consider giving it a star on GitHub! It helps others discover the project.**
 
+> 📦 **1,780+ total downloads on PyPI** — thank you to everyone trying out Agent Memory Guard. The badge above tracks the live total.
 
 [![CI](https://github.com/OWASP/www-project-agent-memory-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/OWASP/www-project-agent-memory-guard/actions/workflows/ci.yml)
-[![PyPI version](https://img.shields.io/pypi/v/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/agent-memory-guard.svg)](https://pepy.tech/project/agent-memory-guard)
-[![Python versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.md)
 [![OWASP Incubator](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
 
