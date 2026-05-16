@@ -96,6 +96,127 @@ class Policy:
             ],
         )
 
+    @classmethod
+    def tiered(cls) -> Policy:
+        """Pre-configured policy with key-pattern-scoped detector rules.
+
+        Maps memory-class key namespaces to detector-specific actions, so
+        e.g. a ``prompt_injection`` finding inside ``credentials.*`` is blocked
+        while the same finding inside ``facts.*`` is quarantined for review.
+
+        Key namespaces (matched as ``fnmatch`` patterns):
+        - ``credentials.*`` — block ``prompt_injection`` and ``sensitive_data``;
+          also listed in ``protected_keys``.
+        - ``permissions.*`` — block ``prompt_injection`` and ``sensitive_data``;
+          also listed in ``protected_keys``.
+        - ``policies.*`` — block ``prompt_injection``; also in ``protected_keys``.
+        - ``facts.*`` — quarantine ``prompt_injection`` and ``size_anomaly``;
+          also in ``protected_keys``.
+        - ``preferences.*`` — redact ``sensitive_data``;
+          also in ``protected_keys``.
+        - ``tool_results.*`` — block ``prompt_injection``,
+          quarantine ``size_anomaly``.
+        - ``scratch.*`` — quarantine ``size_anomaly``.
+
+        Global catch-all rules (block injection, redact secrets, block
+        protected-key writes, quarantine size/rate anomalies) run after the
+        pattern-scoped rules.
+
+        Time-to-live, revalidation, session lifetime, and actor-role gating
+        are NOT implemented here; that's a separate roadmap item.
+        """
+        return cls(
+            default_action=Action.ALLOW,
+            protected_keys=(
+                "credentials.*",
+                "permissions.*",
+                "policies.*",
+                "facts.*",
+                "preferences.*",
+            ),  # tool_results.* and scratch.* are writable by design
+            rules=[
+                # credentials.* — locked, block
+                PolicyRule(
+                    "block_credential_injection",
+                    "prompt_injection",
+                    Action.BLOCK,
+                    keys=("credentials.*",),
+                ),
+                PolicyRule(
+                    "block_credential_sensitive",
+                    "sensitive_data",
+                    Action.BLOCK,
+                    keys=("credentials.*",),
+                ),
+                # permissions.* — locked, block
+                PolicyRule(
+                    "block_permission_injection",
+                    "prompt_injection",
+                    Action.BLOCK,
+                    keys=("permissions.*",),
+                ),
+                PolicyRule(
+                    "block_permission_sensitive",
+                    "sensitive_data",
+                    Action.BLOCK,
+                    keys=("permissions.*",),
+                ),
+                # policies.* — system-only, block
+                PolicyRule(
+                    "block_policy_injection",
+                    "prompt_injection",
+                    Action.BLOCK,
+                    keys=("policies.*",),
+                ),
+                # facts.* — trusted, quarantine
+                PolicyRule(
+                    "quarantine_fact_injection",
+                    "prompt_injection",
+                    Action.QUARANTINE,
+                    keys=("facts.*",),
+                ),
+                PolicyRule(
+                    "quarantine_fact_anomaly",
+                    "size_anomaly",
+                    Action.QUARANTINE,
+                    keys=("facts.*",),
+                ),
+                # preferences.* — user-only, redact
+                PolicyRule(
+                    "redact_preference_sensitive",
+                    "sensitive_data",
+                    Action.REDACT,
+                    keys=("preferences.*",),
+                ),
+                # tool_results.* — untrusted, block + quarantine
+                PolicyRule(
+                    "block_tool_result_injection",
+                    "prompt_injection",
+                    Action.BLOCK,
+                    keys=("tool_results.*",),
+                ),
+                PolicyRule(
+                    "quarantine_tool_result_anomaly",
+                    "size_anomaly",
+                    Action.QUARANTINE,
+                    keys=("tool_results.*",),
+                ),
+                # scratch.* — ephemeral, quarantine
+                PolicyRule(
+                    "quarantine_scratch_anomaly",
+                    "size_anomaly",
+                    Action.QUARANTINE,
+                    keys=("scratch.*",),
+                ),
+                # Global catch-all rules
+                PolicyRule("block_injection", "prompt_injection", Action.BLOCK),
+                PolicyRule("redact_secrets", "sensitive_data", Action.REDACT),
+                PolicyRule("block_protected_key", "protected_key", Action.BLOCK),
+                PolicyRule("quarantine_size_anomaly", "size_anomaly", Action.QUARANTINE),
+                PolicyRule("quarantine_rapid_change", "rapid_change", Action.QUARANTINE),
+            ],
+        )
+
 
 def _parse_action(value: Any) -> Action:
     if isinstance(value, Action):
