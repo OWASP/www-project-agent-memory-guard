@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="OWASP Agent Memory Guard" width="520" />
+  <img src="assets/logo.png" alt="OWASP Agent Memory Guard" width="180" />
 </p>
 
 <div align="center">
