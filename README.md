@@ -1,4 +1,12 @@
+<p align="center">
+  <img src="assets/logo.png" alt="OWASP Agent Memory Guard" width="520" />
+</p>
+
+<div align="center">
+
 # OWASP Agent Memory Guard
+
+</div>
 
 <div align="center">
 
@@ -7,6 +15,14 @@
 [![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) [![Clones](https://img.shields.io/badge/clones-253-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
 </div>
+
+<p align="center">
+  <img src="https://owasp.org/assets/images/logo.png" alt="OWASP" width="140" />
+</p>
+
+<p align="center">
+  🏆 <strong>Officially recognized as an OWASP Incubator Project</strong>
+</p>
 
 ---
 
