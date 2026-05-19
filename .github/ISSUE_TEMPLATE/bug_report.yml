@@ -1,0 +1,58 @@
+name: Bug report
+description: Something is broken in agent-memory-guard or one of its integrations.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! A minimal reproducible example will help us
+        fix it faster.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `python -c "import agent_memory_guard; print(agent_memory_guard.__version__)"`
+      placeholder: "0.3.0-dev"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: integration
+    attributes:
+      label: Integration
+      description: Which surface did you hit the bug on?
+      options:
+        - Core (MemoryGuard / Policy)
+        - LangChain (GuardedChatMessageHistory)
+        - LangChain middleware (langchain-agent-memory-guard)
+        - Custom MemoryStore implementation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you observe?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal repro
+      description: Smallest code snippet that reproduces the issue. Please remove anything unrelated.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      render: shell

@@ -16,13 +16,21 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.md)
 [![OWASP Incubator](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
 
-> **⭐ If you find this project useful for securing your AI agents, please consider giving it a star on GitHub! It helps others discover the project.**
+> **⭐ If this project helps you secure your AI agents, [star it on GitHub](https://github.com/OWASP/www-project-agent-memory-guard/stargazers) — it helps others find the project.**
+> **🔗 Share it:** [Tweet](https://twitter.com/intent/tweet?text=OWASP%20Agent%20Memory%20Guard%20%E2%80%94%20runtime%20defense%20against%20AI%20agent%20memory%20poisoning%20(ASI06)&url=https://github.com/OWASP/www-project-agent-memory-guard) · [LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/OWASP/www-project-agent-memory-guard) · [Hacker News](https://news.ycombinator.com/submitlink?u=https://github.com/OWASP/www-project-agent-memory-guard&t=OWASP%20Agent%20Memory%20Guard)
 
 > **Stop AI agents from being weaponized through their own memory.**
 
 `agent-memory-guard` is a runtime defense layer that screens every read and write to your AI agent's memory, blocking prompt injection, secret leakage, and integrity tampering before they corrupt agent behavior across sessions.
 
 It is the OWASP reference implementation for **ASI06: Memory Poisoning** from the [OWASP Top 10 for Agentic Applications](https://owasp.org/www-project-top-10-for-llm-applications/).
+
+```bash
+pip install agent-memory-guard          # core library
+pip install langchain-agent-memory-guard # optional LangChain middleware
+```
+
+Jump to a quickstart for your framework: [LangChain](#langchain-integration) · [LangChain middleware](#langchain-middleware) · [OpenAI Agents](#openai-agents-sdk) · [AutoGen](#autogen) · [mem0](#mem0)
 
 ![OWASP Agent Memory Guard — Live Attack Demo](assets/demo.gif)
 
@@ -122,6 +130,8 @@ guard = MemoryGuard(policy=load_policy(Path("policy.yaml")))
 
 ## LangChain integration
 
+Drop-in chat history that screens every message before it lands in memory:
+
 ```python
 from agent_memory_guard import MemoryGuard, Policy
 from agent_memory_guard.integrations import GuardedChatMessageHistory
@@ -132,31 +142,104 @@ history = GuardedChatMessageHistory(
 )
 ```
 
-## Security Benchmark Results
+### LangChain middleware
 
-Tested against 55 real-world attack payloads across 4 threat categories:
+For full agent protection (model inputs, model outputs, **and tool outputs** — the
+primary injection vector), use the LangChain agent middleware package:
 
-| Metric | Value |
-|--------|-------|
-| **Detection Rate (Recall)** | 92.5% |
-| **Precision** | 100% |
-| **False Positive Rate** | 0% |
-| **Median Latency** | 59 µs |
-| **F1 Score** | 0.961 |
+```bash
+pip install langchain-agent-memory-guard
+```
 
-| Attack Category | Detection Rate |
-|----------------|---------------|
-| Prompt Injection | 100% (15/15) |
-| Protected Key Tampering | 100% (8/8) |
-| Sensitive Data Leakage | 83% (10/12) |
-| Size Anomaly | 80% (4/5) |
+```python
+from langchain.agents import create_agent
+from langchain_agent_memory_guard import MemoryGuardMiddleware
+
+agent = create_agent(
+    "openai:gpt-4o",
+    tools=[my_search_tool, my_db_tool],
+    middleware=[MemoryGuardMiddleware()],     # strict policy by default
+)
+
+result = agent.invoke({"messages": [("user", "Search for recent news")]})
+```
+
+See [`integrations/langchain-agent-memory-guard/`](integrations/langchain-agent-memory-guard/) for violation modes (`block` / `warn` / `strip`) and custom policies.
+
+## Other frameworks
+
+Agent Memory Guard is framework-agnostic — anything that satisfies the small
+[`MemoryStore`](src/agent_memory_guard/storage/memory_store.py) protocol
+(`get` / `set` / `delete` / `keys` / `items` / `__contains__`) can be wrapped.
+That covers the OpenAI Agents SDK, AutoGen, mem0, custom RAG stores, and ad-hoc
+dicts. The recipes below are starting points — adapt them to your store.
+
+### OpenAI Agents SDK
+
+Wrap whatever dict-like or KV scratchpad your agent reads and writes:
+
+```python
+from agent_memory_guard import MemoryGuard, Policy
+from agent_memory_guard.storage import InMemoryStore
+
+guard = MemoryGuard(InMemoryStore(), policy=Policy.strict())
+
+def remember(key: str, value: str) -> None:
+    guard.write(key, value, source="openai-agent")
+
+def recall(key: str) -> str | None:
+    return guard.read(key, sink="openai-agent")
+
+# expose `remember` / `recall` to your Agents SDK tools — every write
+# now passes through injection, leakage, and protected-key detectors.
+```
+
+### AutoGen
+
+AutoGen agents typically accumulate a `chat_history` list. Route writes
+through the guard before appending:
+
+```python
+from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+
+guard = MemoryGuard(policy=Policy.strict())
+
+def guarded_append(history: list[dict], message: dict) -> None:
+    try:
+        guard.write(f"autogen.msg.{len(history)}", message["content"],
+                    source=message.get("role", "agent"))
+    except PolicyViolation as exc:
+        # injection or protected-key write — drop it instead of poisoning history
+        print("blocked:", exc)
+        return
+    history.append(message)
+```
+
+### mem0
+
+`mem0` exposes an `add` / `get` API. Screen content before it is persisted:
+
+```python
+from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+
+guard = MemoryGuard(policy=Policy.strict())
+
+def safe_add(mem0_client, *, user_id: str, content: str, key: str) -> bool:
+    try:
+        guard.write(key, content, source="mem0")
+    except PolicyViolation:
+        return False
+    mem0_client.add(content, user_id=user_id)
+    return True
+```
+
+> First-class adapters for LlamaIndex, CrewAI, Redis, and PostgreSQL are on the
+> [roadmap](#roadmap) for v0.3.0. Want to help build one? See
+> [Contributing](#contributing).
 
 ![Benchmark Dashboard](benchmarks/results/benchmark_dashboard.png)
 
-Run the benchmark yourself:
-```bash
-python benchmarks/security_benchmark.py
-```
+See the [benchmark results above](#benchmark-results) for category-level breakdowns and the command to reproduce them locally.
 
 ## Architecture
 
@@ -182,6 +265,17 @@ python benchmarks/security_benchmark.py
   protection, real-time dashboard.
 - **Q4 2026** — v1.0.0: multi-agent security, Lab promotion.
 
+## Community & adoption
+
+Agent Memory Guard is an OWASP Incubator project. It is maintained in the open
+and used by builders working on agent security.
+
+- **Star the repo** if it's useful — [github.com/OWASP/www-project-agent-memory-guard](https://github.com/OWASP/www-project-agent-memory-guard) — visibility helps OWASP fund future work.
+- **Using it in production?** Open an issue or PR adding your team to an
+  `ADOPTERS.md` (coming soon). We highlight adopters in release notes.
+- **Found a gap?** File an issue using one of the [issue templates](.github/ISSUE_TEMPLATE) — bug, feature, docs, or adapter request.
+- **Talking about it?** Tag [`#AgentMemoryGuard`](https://twitter.com/search?q=%23AgentMemoryGuard) or link this repo so others can find it.
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -189,6 +283,13 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 Looking for a place to start? Check out issues labeled
 [`good first issue`](https://github.com/OWASP/www-project-agent-memory-guard/labels/good%20first%20issue)
 or [`help wanted`](https://github.com/OWASP/www-project-agent-memory-guard/labels/help%20wanted).
+
+High-leverage contributions we'd love help with:
+
+- **Framework adapters** — LlamaIndex, CrewAI, Haystack, custom RAG stacks
+- **Backends** — Redis, PostgreSQL, vector-store integrations (Pinecone, Weaviate, Qdrant)
+- **Detectors** — new threat categories or higher-recall versions of existing ones
+- **Docs & examples** — your real-world usage helps others adopt the project
 
 ## Security
 

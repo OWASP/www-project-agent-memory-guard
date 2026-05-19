@@ -1,0 +1,24 @@
+name: Documentation issue
+description: Something in the README, examples, or docs is wrong, missing, or unclear.
+title: "[docs] "
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Page / file
+      description: Where in the docs is the issue? Link or path is fine.
+      placeholder: "README.md → 'LangChain integration'"
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is wrong or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording (optional)
+      description: A concrete rewrite or addition makes it faster to land a fix.

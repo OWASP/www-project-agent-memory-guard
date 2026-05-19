@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/OWASP/www-project-agent-memory-guard/security/policy
+    about: Please report security issues privately via our security policy, not as a public issue.
+  - name: Question or discussion
+    url: https://owasp.slack.com
+    about: Ask questions in the OWASP Slack workspace (#project-agent-memory-guard).

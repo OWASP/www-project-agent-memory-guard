@@ -1,0 +1,32 @@
+name: Framework / backend adapter request
+description: Request a first-class integration for a framework, vector store, or backend.
+title: "[adapter] "
+labels: ["enhancement", "integration"]
+body:
+  - type: input
+    id: target
+    attributes:
+      label: Framework or backend
+      placeholder: "LlamaIndex / CrewAI / Redis / Pinecone / mem0 / ..."
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: How you'd use it
+      description: Describe the agent or app you're trying to protect.
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: Target API surface
+      description: Which functions/classes from the target framework should the adapter wrap?
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can contribute the implementation
+        - label: I can review a PR for this adapter
+        - label: I can test against a real workload
