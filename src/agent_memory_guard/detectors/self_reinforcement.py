@@ -22,7 +22,7 @@ import difflib
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Deque
+from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
 from agent_memory_guard.detectors.injection import _stringify
@@ -33,7 +33,7 @@ from agent_memory_guard.events import Severity, SourceClass
 class _SelfWriteHistory:
     """Sliding history of recent agent_authored writes on a single key."""
 
-    writes: Deque[tuple[float, str]] = field(default_factory=deque)
+    writes: deque[tuple[float, str]] = field(default_factory=deque)
     last_independent_write_at: float = 0.0
 
 

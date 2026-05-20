@@ -12,8 +12,9 @@ from __future__ import annotations
 import pytest
 
 from agent_memory_guard import MemoryGuard, SourceClass
-from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
-
+from agent_memory_guard.detectors.self_reinforcement import (
+    SelfReinforcementDetector,
+)
 
 # ---- SourceClass / receipt_uri propagation -----------------------------------
 
