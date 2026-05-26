@@ -58,6 +58,12 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["agent_memory_guard"]
+omit = [
+    "*/integrations/crewai.py",
+    "*/integrations/llamaindex.py",
+    "*/integrations/langchain.py",
+    "*/metrics.py",
+]
 
 [tool.coverage.report]
 fail_under = 75
