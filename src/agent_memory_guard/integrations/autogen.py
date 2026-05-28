@@ -21,7 +21,13 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 class GuardedAutoGenAgent:
-    """Wraps an AutoGen ConversableAgent with memory poisoning protection."""
+    """Wraps an AutoGen ConversableAgent with memory poisoning protection.
+
+    Note: This wrapper intercepts explicit .send() / .receive() calls.
+    It does NOT hook into AutoGen's internal reply loop (register_reply,
+    _process_received_message). For group chat scenarios, use
+    install_guard() instead.
+    """
 
     def __init__(
         self,
@@ -30,6 +36,11 @@ class GuardedAutoGenAgent:
         *,
         drop_blocked: bool = True,
     ) -> None:
+        if not _HAS_AUTOGEN:
+            raise ImportError(
+                "agent-memory-guard[autogen] not installed; "
+                "pip install agent-memory-guard[autogen]"
+            )
         self._agent = agent
         self.guard = guard or MemoryGuard()
         self._drop_blocked = drop_blocked
