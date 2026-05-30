@@ -113,7 +113,14 @@ class MemoryGuard:
                 drifted.append(key)
         return drifted
 
-    def write(self, key: str, value: Any, *, source: str = "agent", source_type: SourceType = SourceType.UNKNOWN) -> Action:
+    def write(
+        self,
+        key: str,
+        value: Any,
+        *,
+        source: str = "agent",
+        source_type: SourceType = SourceType.UNKNOWN,
+    ) -> Action:
         """Inspect and (if policy allows) commit a write. Returns the action taken."""
         committed_value = value
         verdicts = self._run_detectors(key, value, operation="write")
@@ -200,7 +207,7 @@ class MemoryGuard:
                 key=key,
                 message="Integrity verification failed on read",
                 metadata={"expected": exc.expected, "actual": exc.actual},
-                source_type=SourceType.SYSTEM,
+                source_type=SourceType.UNKNOWN,
             )
             raise
 
@@ -218,7 +225,7 @@ class MemoryGuard:
                 key=key,
                 message="Read blocked by policy",
                 metadata={"sink": sink},
-                source_type=SourceType.SYSTEM,
+                source_type=SourceType.UNKNOWN,
             )
             raise PolicyViolation(f"Read of '{key}' blocked by policy", key=key)
 
@@ -232,7 +239,7 @@ class MemoryGuard:
                 key=key,
                 message="Sensitive content redacted on read",
                 metadata={"sink": sink},
-                source_type=SourceType.SYSTEM,
+                source_type=SourceType.UNKNOWN,
             )
         elif any(v.matched for v in verdicts):
             self._emit(
@@ -243,7 +250,7 @@ class MemoryGuard:
                 key=key,
                 message=_combined_message(verdicts) or "Read allowed with findings",
                 metadata={"sink": sink},
-                source_type=SourceType.SYSTEM,
+                source_type=SourceType.UNKNOWN,
             )
         return value
 
@@ -256,7 +263,7 @@ class MemoryGuard:
                 operation="delete",
                 key=key,
                 message=f"Delete of protected key '{key}' blocked",
-                source_type=SourceType.SYSTEM,
+                source_type=SourceType.UNKNOWN,
             )
             raise PolicyViolation(f"Delete of '{key}' blocked", key=key)
         self._store.delete(key)
@@ -293,7 +300,7 @@ class MemoryGuard:
             key="*",
             message=f"Rolled back to snapshot {snap.snapshot_id} ({snap.label})",
             metadata={"snapshot_id": snap.snapshot_id, "digest": snap.digest},
-            source_type=SourceType.SYSTEM,
+            source_type=SourceType.UNKNOWN,
         )
         return snap
 
