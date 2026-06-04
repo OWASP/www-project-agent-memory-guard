@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+from pathlib import Path
 from typing import Any, Protocol
 
 from agent_memory_guard.detectors.base import DetectionResult
@@ -63,18 +64,44 @@ class OpenAICompatibleEvaluator:
     api_key: str | None = None
     model: str | None = None
     base_url: str = "https://api.openai.com/v1"
+    provider: str | None = None
+    site_url: str | None = None
+    app_name: str | None = None
+    dotenv_path: str | None = ".env"
     timeout_seconds: float = 15.0
 
     def __post_init__(self) -> None:
+        _load_dotenv(self.dotenv_path)
+        provider = (
+            self.provider
+            or os.environ.get("AMG_SOURCE_RISK_PROVIDER")
+            or ("openrouter" if os.environ.get("OPENROUTER_API_KEY") else "openai")
+        ).lower()
+        object.__setattr__(self, "provider", provider)
         if self.api_key is None:
             object.__setattr__(
-                self, "api_key", os.environ.get("AMG_SOURCE_RISK_API_KEY")
+                self,
+                "api_key",
+                _resolve_api_key(provider),
             )
         if self.model is None:
-            object.__setattr__(self, "model", os.environ.get("AMG_SOURCE_RISK_MODEL"))
+            object.__setattr__(self, "model", _resolve_model(provider))
         env_base = os.environ.get("AMG_SOURCE_RISK_BASE_URL")
-        if env_base and self.base_url == "https://api.openai.com/v1":
+        if env_base:
             object.__setattr__(self, "base_url", env_base.rstrip("/"))
+        elif (
+            provider == "openrouter"
+            and self.base_url == "https://api.openai.com/v1"
+        ):
+            object.__setattr__(self, "base_url", "https://openrouter.ai/api/v1")
+        if self.site_url is None:
+            object.__setattr__(
+                self, "site_url", os.environ.get("AMG_SOURCE_RISK_SITE_URL")
+            )
+        if self.app_name is None:
+            object.__setattr__(
+                self, "app_name", os.environ.get("AMG_SOURCE_RISK_APP_NAME")
+            )
 
     def assess(
         self,
@@ -124,10 +151,12 @@ class OpenAICompatibleEvaluator:
         request = urllib.request.Request(
             url=f"{self.base_url.rstrip('/')}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            },
+            headers=_build_headers(
+                api_key=self.api_key,
+                provider=self.provider or "openai",
+                site_url=self.site_url,
+                app_name=self.app_name,
+            ),
             method="POST",
         )
         try:
@@ -150,7 +179,11 @@ class OpenAICompatibleEvaluator:
             claimed_subject=str(parsed.get("claimed_subject", "unknown")),
             confidence=parsed.get("confidence", 0.0),
             reason=str(parsed.get("reason", "")),
-            metadata={"provider": "openai_compatible", "model": self.model},
+            metadata={
+                "provider": self.provider or "openai",
+                "backend": "openai_compatible",
+                "model": self.model,
+            },
         )
 
 
@@ -316,6 +349,69 @@ def _severity_for(risk: float) -> Severity:
 
 def _clamp01(value: float) -> float:
     return min(1.0, max(0.0, value))
+
+
+def _load_dotenv(path: str | None) -> None:
+    if not path:
+        return
+    env_file = Path(path)
+    if not env_file.is_absolute():
+        env_file = Path.cwd() / env_file
+    if not env_file.exists():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        os.environ.setdefault(key, value)
+
+
+def _resolve_api_key(provider: str) -> str | None:
+    candidates = ["AMG_SOURCE_RISK_API_KEY"]
+    if provider == "openrouter":
+        candidates.extend(["OPENROUTER_API_KEY", "OPENAI_API_KEY"])
+    else:
+        candidates.extend(["OPENAI_API_KEY", "OPENROUTER_API_KEY"])
+    for key in candidates:
+        value = os.environ.get(key)
+        if value:
+            return value
+    return None
+
+
+def _resolve_model(provider: str) -> str | None:
+    candidates = ["AMG_SOURCE_RISK_MODEL"]
+    if provider == "openrouter":
+        candidates.extend(["OPENROUTER_MODEL", "OPENAI_MODEL"])
+    else:
+        candidates.extend(["OPENAI_MODEL", "OPENROUTER_MODEL"])
+    for key in candidates:
+        value = os.environ.get(key)
+        if value:
+            return value
+    return None
+
+
+def _build_headers(
+    *,
+    api_key: str | None,
+    provider: str,
+    site_url: str | None,
+    app_name: str | None,
+) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    if provider == "openrouter":
+        if site_url:
+            headers["HTTP-Referer"] = site_url
+        if app_name:
+            headers["X-Title"] = app_name
+    return headers
 
 
 __all__ = [
