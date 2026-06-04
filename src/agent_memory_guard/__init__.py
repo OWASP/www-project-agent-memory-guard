@@ -15,11 +15,13 @@ from agent_memory_guard.exceptions import (
 )
 from agent_memory_guard.guard import MemoryGuard
 from agent_memory_guard.policies.policy import Policy
+from agent_memory_guard.source_aware_guard import SourceAwareMemoryGuard
 
 __version__ = "0.3.0-dev"
 
 __all__ = [
     "MemoryGuard",
+    "SourceAwareMemoryGuard",
     "Policy",
     "MemoryClass",
     "PromotionEdge",
