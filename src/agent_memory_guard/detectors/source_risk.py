@@ -69,6 +69,7 @@ class OpenAICompatibleEvaluator:
     app_name: str | None = None
     dotenv_path: str | None = ".env"
     timeout_seconds: float = 15.0
+    max_tokens: int | None = 128
 
     def __post_init__(self) -> None:
         _load_dotenv(self.dotenv_path)
@@ -148,6 +149,8 @@ class OpenAICompatibleEvaluator:
                 },
             ],
         }
+        if self.max_tokens is not None:
+            payload["max_tokens"] = self.max_tokens
         request = urllib.request.Request(
             url=f"{self.base_url.rstrip('/')}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
