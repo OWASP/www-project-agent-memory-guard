@@ -226,12 +226,14 @@ class SourceRiskDetector:
         *,
         risk_threshold: float = 0.6,
         min_confidence: float = 0.0,
+        fail_closed_on_error: bool = False,
         source_weights: dict[SourceClass, float] | None = None,
         target_sensitivity: tuple[tuple[str, float], ...] = DEFAULT_TARGET_SENSITIVITY,
     ) -> None:
         self._evaluator = evaluator
         self._risk_threshold = _clamp01(risk_threshold)
         self._min_confidence = _clamp01(min_confidence)
+        self._fail_closed_on_error = fail_closed_on_error
         self._source_weights = dict(DEFAULT_SOURCE_WEIGHTS)
         if source_weights:
             self._source_weights.update(source_weights)
@@ -256,8 +258,25 @@ class SourceRiskDetector:
                 source_class=source_class,
                 operation=operation,
             )
-        except Exception:
+        except Exception as exc:
             log.exception("SourceRiskDetector evaluator failed")
+            target_sensitivity = _target_sensitivity_for(key, self._target_sensitivity)
+            if self._fail_closed_on_error and target_sensitivity >= 0.8:
+                return DetectionResult(
+                    detector=self.name,
+                    matched=True,
+                    severity=Severity.HIGH,
+                    message=(
+                        f"Source-risk evaluator failed on sensitive target '{key}'; "
+                        "failing closed"
+                    ),
+                    metadata={
+                        "error_type": type(exc).__name__,
+                        "source_class": source_class.value,
+                        "target_sensitivity": round(target_sensitivity, 4),
+                        "fail_closed": True,
+                    },
+                )
             return DetectionResult(self.name, matched=False)
 
         if assessment.confidence < self._min_confidence:

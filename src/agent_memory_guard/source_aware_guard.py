@@ -49,6 +49,7 @@ class SourceAwareMemoryGuard(MemoryGuard):
         app_name: str | None = None,
         dotenv_path: str | None = ".env",
         timeout_seconds: float = 15.0,
+        fail_closed_on_evaluator_error: bool = False,
     ) -> None:
         resolved_evaluator = _resolve_evaluator(
             evaluator=evaluator,
@@ -69,6 +70,7 @@ class SourceAwareMemoryGuard(MemoryGuard):
                     resolved_evaluator,
                     risk_threshold=risk_threshold,
                     min_confidence=min_confidence,
+                    fail_closed_on_error=fail_closed_on_evaluator_error,
                 )
             )
 
