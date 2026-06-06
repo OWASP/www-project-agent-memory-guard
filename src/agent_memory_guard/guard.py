@@ -37,12 +37,27 @@ EventHandler = Callable[[SecurityEvent], None]
 
 
 class MemoryGuard:
-    """Wraps a memory store and screens every read/write through detectors+policy.
+    """Wraps a memory store and screens every read/write through detectors and policies.
 
-    The guard is intentionally permissive by default: instantiating with no
-    arguments yields a working `MemoryGuard()` that detects threats and emits
-    events but does not block writes. Pass `policy=Policy.strict()` (or load
-    from YAML) to enable enforcement actions.
+    The guard acts as an intermediary runtime defense layer. It is intentionally permissive
+    by default: instantiating with no arguments yields a guard that detects threats and
+    emits events but does not block writes. Pass `policy=Policy.strict()` (or load from YAML)
+    to enable active enforcement.
+
+    Args:
+        store: The backing MemoryStore instance. If None, InMemoryStore is used.
+        policy: The active security Policy to enforce. If None, Policy.permissive() is used.
+        detectors: Optional collection of Detector instances. If None, a default suite is initialized.
+        snapshots: Store to manage memory state snapshots. If None, SnapshotStore is initialized.
+        event_handlers: Callbacks triggered whenever security events are emitted.
+        snapshot_on_block: If True, captures a snapshot when a write is blocked. Defaults to True.
+        promotion_rules: Rules dictating valid class transitions. Defaults to PromotionRules().
+        current_task: Optional initial task ID for cross-task contamination checks.
+
+    Example:
+        >>> from agent_memory_guard import MemoryGuard, Policy
+        >>> guard = MemoryGuard(policy=Policy.strict())
+        >>> guard.write("session.notes", "Safe memory content")
     """
 
     def __init__(
@@ -114,17 +129,54 @@ class MemoryGuard:
 
     @property
     def policy(self) -> Policy:
+        """Get the active security policy configuration.
+
+        Returns:
+            Policy: The policy engine instance currently enforced by this guard.
+
+        Example:
+            >>> guard = MemoryGuard(policy=Policy.strict())
+            >>> print(guard.policy.default_action)
+        """
         return self._policy
 
     @property
     def events(self) -> list[SecurityEvent]:
+        """Get the log of security events emitted during operations.
+
+        Returns:
+            list[SecurityEvent]: A copy of the list of recorded security events.
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> print(len(guard.events))
+        """
         return list(self._events)
 
     @property
     def quarantine(self) -> dict[str, Any]:
+        """Get the dictionary of quarantined memory writes.
+
+        Returns:
+            dict[str, Any]: A copy of the dictionary holding quarantined keys and their values.
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> print(guard.quarantine)
+        """
         return dict(self._quarantine)
 
     def add_event_handler(self, handler: EventHandler) -> None:
+        """Register a callback to handle emitted security events.
+
+        Args:
+            handler: A callable that accepts a single SecurityEvent object
+                and performs custom handling (e.g. logging, SIEM forwarding).
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> guard.add_event_handler(lambda ev: print(ev.message))
+        """
         self._handlers.append(handler)
 
     def baseline(self, key: str, value: Any | None = None) -> str:
@@ -152,6 +204,15 @@ class MemoryGuard:
 
     @property
     def current_task(self) -> str | None:
+        """Get the active task identifier context.
+
+        Returns:
+            str | None: The active task ID, or None if no task context is set.
+
+        Example:
+            >>> guard = MemoryGuard(current_task="task_123")
+            >>> print(guard.current_task)
+        """
         return self._current_task
 
     def set_current_task(self, task_id: str | None) -> None:
@@ -160,9 +221,37 @@ class MemoryGuard:
         self._cross_task_detector.set_current_task(task_id)
 
     def classify(self, key: str) -> MemoryClass | None:
+        """Get the classification class associated with a memory key.
+
+        Args:
+            key: The memory key to retrieve the classification for.
+
+        Returns:
+            MemoryClass | None: The memory class of the key, or None if the key
+                is not classified.
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> guard.write("session.notes", "Some text", cls="scratch")
+            >>> print(guard.classify("session.notes"))
+        """
         return self._classification.get(key)
 
     def origin_task(self, key: str) -> str | None:
+        """Get the ID of the task that originally wrote the specified memory key.
+
+        Args:
+            key: The memory key to check.
+
+        Returns:
+            str | None: The task ID that authored the key, or None if no task
+                is associated with it.
+
+        Example:
+            >>> guard = MemoryGuard(current_task="task_123")
+            >>> guard.write("session.notes", "Task data")
+            >>> print(guard.origin_task("session.notes"))
+        """
         return self._classification.task_of(key)
 
     def promote(
@@ -255,26 +344,29 @@ class MemoryGuard:
         cls: MemoryClass | str | None = None,
         task_id: str | None = None,
     ) -> Action:
-        """Inspect and (if policy allows) commit a write. Returns the action taken.
+        """Write a value to the guarded memory store.
 
-        Parameters
-        ----------
-        source_class
-            Provenance of this write — drives the self-reinforcement detector
-            and per-class telemetry. Use :class:`SourceClass.AGENT_AUTHORED`
-            for writes the agent generates from its own reasoning;
-            :class:`SourceClass.EXTERNAL_TOOL` for tool outputs;
-            :class:`SourceClass.USER_INPUT` for direct user content.
-        receipt_uri
-            Optional pointer into an external audit / receipt chain (e.g.
-            an Ed25519 co-signed receipt URI). Stored on the emitted
-            ``SecurityEvent`` so downstream SOC tooling can correlate
-            guard decisions with execution receipts.
-        cls
-            Provenance class for the entry (see :class:`MemoryClass`).
-        task_id
-            Override the task scope for this entry (defaults to the guard's
-            current task).
+        The value passes through the detector pipeline and policy engine
+        before being persisted. Depending on policy rules, the write may
+        be allowed, redacted, quarantined, or blocked.
+
+        Args:
+            key: The memory key to write to (e.g. 'session.notes').
+            value: The value to store.
+            source: The identifier of the writer (e.g. 'agent'). Defaults to 'agent'.
+            source_class: Provenance classification of this write. Use SourceClass.AGENT_AUTHORED
+                for agent reasoning, SourceClass.EXTERNAL_TOOL for tool outputs, or
+                SourceClass.USER_INPUT for user content. Defaults to None.
+            receipt_uri: Optional URI pointing to an external audit receipt. Defaults to None.
+            cls: Provenance classification class for the entry. Defaults to None.
+            task_id: Optional task identifier override for cross-task checks. Defaults to None.
+
+        Returns:
+            Action: The action taken by the policy engine (ALLOW, REDACT, QUARANTINE, or BLOCK).
+
+        Raises:
+            PolicyViolation: If the policy blocks the write.
+            ClassificationError: If the write would illegal reclassify an existing key.
         """
         normalised_source_class: SourceClass = _coerce_source_class(source_class)
 
@@ -397,7 +489,24 @@ class MemoryGuard:
         return decision
 
     def read(self, key: str, default: Any = None, *, sink: str = "agent") -> Any:
-        """Read with integrity verification and outbound leakage screening."""
+        """Read a value from the guarded memory store.
+
+        The read triggers integrity verification checks on baseline-monitored keys
+        and runs outbound leakage screening before returning the value.
+
+        Args:
+            key: The memory key to read from.
+            default: The default value to return if the key is not found. Defaults to None.
+            sink: The destination/consumer of the read data. Defaults to 'agent'.
+
+        Returns:
+            Any: The stored memory value, which may be redacted or modified by detectors,
+                or the default value if the key does not exist.
+
+        Raises:
+            PolicyViolation: If the policy blocks the read.
+            IntegrityError: If the key baseline check fails on read.
+        """
         if key not in self._store:
             return default
 
@@ -456,6 +565,23 @@ class MemoryGuard:
         return value
 
     def delete(self, key: str) -> None:
+        """Delete a key and its associated metadata from the memory store.
+
+        This clears the value from storage and resets any associated integrity baselines,
+        classification metadata, and detector historical states. Protected keys cannot
+        be deleted.
+
+        Args:
+            key: The memory key to delete.
+
+        Raises:
+            PolicyViolation: If the key matches protected key patterns, blocking deletion.
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> guard.write("session.scratch", "temporary data")
+            >>> guard.delete("session.scratch")
+        """
         if self._protected_detector.matches(key):
             self._emit(
                 detector="protected_key",
@@ -526,13 +652,59 @@ class MemoryGuard:
     # ---- snapshots ----------------------------------------------------
 
     def snapshot(self, label: str = "manual") -> Snapshot:
+        """Capture a point-in-time snapshot of the guarded memory store.
+
+        This creates a forensic snapshot of the current state of the memory store,
+        calculates an integrity digest, and stores it in the snapshot history
+        for audit or rollback capability.
+
+        Args:
+            label: A descriptive tag for the snapshot (e.g. 'manual', 'pre-block').
+                Defaults to 'manual'.
+
+        Returns:
+            Snapshot: The captured snapshot instance containing ID, timestamp,
+                label, copy of data, and SHA-256 digest.
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> guard.write("session.user", "Alice")
+            >>> snap = guard.snapshot(label="user_session_init")
+            >>> print(snap.snapshot_id)
+        """
         return self._snapshots.capture(self._dump_store(), label=label)
 
     def list_snapshots(self) -> list[Snapshot]:
+        """List all captured snapshots in the snapshot store.
+
+        Returns:
+            list[Snapshot]: A list of all historical snapshots, ordered from
+                oldest to newest.
+
+        Example:
+            >>> guard = MemoryGuard()
+            >>> guard.snapshot(label="backup_1")
+            >>> print(len(guard.list_snapshots()))
+        """
         return self._snapshots.list()
 
     def rollback(self, snapshot_id: str | None = None) -> Snapshot:
-        """Restore the store to a known-good snapshot (latest if id omitted)."""
+        """Restore the memory store to a known-good snapshot state.
+
+        This method clears current stored data and restores all keys and values
+        from the specified snapshot. If no snapshot ID is provided, the latest
+        captured snapshot is used.
+
+        Args:
+            snapshot_id: The unique identifier of the snapshot to restore.
+                If None, the latest snapshot is used. Defaults to None.
+
+        Returns:
+            Snapshot: The restored snapshot instance.
+
+        Raises:
+            LookupError: If no snapshot is found in the snapshot store.
+        """
         snap = (
             self._snapshots.get(snapshot_id)
             if snapshot_id

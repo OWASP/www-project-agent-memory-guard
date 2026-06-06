@@ -40,9 +40,12 @@ class _SelfWriteHistory:
 class SelfReinforcementDetector:
     """Flags rapid, self-similar agent_authored writes to the same key.
 
-    Only fires on writes whose `source_class == AGENT_AUTHORED`. Writes
-    from other source classes (`EXTERNAL_TOOL`, `USER_INPUT`, `SYSTEM`)
-    are treated as independent evidence and reset the cool-down counter.
+    Only fires on writes whose source_class is AGENT_AUTHORED. Writes from other
+    source classes (EXTERNAL_TOOL, USER_INPUT, SYSTEM) are treated as independent
+    evidence and reset the cool-down counter.
+
+    Attributes:
+        name: The unique identifier for this detector.
     """
 
     name = "self_reinforcement"
@@ -68,21 +71,42 @@ class SelfReinforcementDetector:
         self._by_key: dict[str, _SelfWriteHistory] = {}
 
     def reset(self, key: str | None = None) -> None:
+        """Reset the write history cache for a specific key or all keys.
+
+        Args:
+            key: The memory key to clear history for. If None, clears history
+                for all keys. Defaults to None.
+        """
         if key is None:
             self._by_key.clear()
         else:
             self._by_key.pop(key, None)
 
     def note_independent_write(self, key: str) -> None:
-        """Called by `MemoryGuard` when a non-agent_authored write lands;
-        clears the cool-down counter so the next agent write isn't penalised
-        for self-reinforcement when independent evidence has just arrived."""
+        """Record an independent (non-agent-authored) write on a key.
+
+        This clears the self-reinforcement cool-down history for that key,
+        preventing subsequent writes from being flagged as self-reinforcement.
+
+        Args:
+            key: The memory key written to.
+        """
         history = self._by_key.get(key)
         if history is not None:
             history.writes.clear()
             history.last_independent_write_at = time.monotonic()
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect write operations to detect self-reinforcement loops.
+
+        Args:
+            key: The memory key being targeted.
+            value: The data value being written.
+            operation: The memory operation. Only checks 'write' operations.
+
+        Returns:
+            DetectionResult: The check outcome, matched=True if a loop is detected.
+        """
         # source_class is carried on the inspect call via a contextvar-style
         # convention: the guard sets it on the detector before each write.
         # We default to UNKNOWN if no class was set.

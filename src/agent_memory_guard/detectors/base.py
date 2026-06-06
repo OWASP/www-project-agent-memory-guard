@@ -18,6 +18,27 @@ class DetectionResult:
 
 
 class Detector(Protocol):
+    """Protocol defining the interface for memory guard detectors.
+
+    Detectors inspect memory read and write operations to identify security events,
+    anomalies, or injections.
+
+    Attributes:
+        name: The unique string identifier of the detector.
+    """
+
     name: str
 
-    def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult: ...
+    def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect a memory operation for security findings.
+
+        Args:
+            key: The memory key being accessed or written.
+            value: The value being read or written.
+            operation: The memory operation (e.g. 'read', 'write').
+
+        Returns:
+            DetectionResult: The verdict containing match status, severity,
+                and details.
+        """
+        ...

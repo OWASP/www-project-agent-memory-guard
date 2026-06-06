@@ -26,7 +26,14 @@ DEFAULT_LEAKAGE_PATTERNS: dict[str, str] = {
 
 
 class SensitiveDataDetector:
-    """Flags secrets/PII present in memory values prior to write or after read."""
+    """Flags secrets/PII present in memory values prior to write or after read.
+
+    This detector checks inputs for API keys, tokens, SSH keys, emails, credit card details,
+    and US Social Security Numbers.
+
+    Attributes:
+        name: The unique identifier for this detector.
+    """
 
     name = "sensitive_data"
 
@@ -43,6 +50,16 @@ class SensitiveDataDetector:
         self._severity = severity
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect a memory value for sensitive data/leakage markers.
+
+        Args:
+            key: The memory key being targeted.
+            value: The data value to inspect.
+            operation: The memory operation being performed.
+
+        Returns:
+            DetectionResult: The check result including list of matching categories.
+        """
         text = _stringify(value)
         if not text:
             return DetectionResult(self.name, matched=False)
@@ -64,6 +81,16 @@ class SensitiveDataDetector:
         )
 
     def redact(self, value: Any) -> Any:
+        """Redact sensitive data patterns from a memory value.
+
+        Replaces matching occurrences with a redaction placeholder.
+
+        Args:
+            value: The memory value containing sensitive data.
+
+        Returns:
+            Any: The redacted text value.
+        """
         text = _stringify(value)
         for label, pattern in self._patterns.items():
             text = pattern.sub(f"[REDACTED:{label}]", text)

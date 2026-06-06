@@ -42,7 +42,22 @@ class SourceClass(str, Enum):
 
 @dataclass
 class SecurityEvent:
-    """Structured record of a guard decision, suitable for SIEM forwarding."""
+    """Structured record of a guard decision, suitable for SIEM forwarding.
+
+    Attributes:
+        detector: The name of the detector that triggered this event.
+        severity: The severity level of the detected event.
+        action: The mitigation action taken by the policy engine.
+        key: The memory key being accessed.
+        message: Descriptive log message outlining the finding.
+        operation: The database/memory operation name. Defaults to "write".
+        source_class: Provenance of the write operation. Defaults to SourceClass.UNKNOWN.
+        receipt_uri: Optional URI pointing to an external cryptographically signed audit receipt.
+            Defaults to None.
+        metadata: Arbitrary additional event metadata. Defaults to an empty dict.
+        timestamp: Epoch timestamp when the event was recorded. Defaults to current time.
+        event_id: Unique string identifier for this event. Defaults to a random UUID.
+    """
 
     detector: str
     severity: Severity

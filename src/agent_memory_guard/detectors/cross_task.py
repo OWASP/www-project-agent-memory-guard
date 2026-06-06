@@ -19,7 +19,14 @@ from agent_memory_guard.events import Severity
 
 
 class CrossTaskContaminationDetector:
-    """Match on read: durable memory accessed outside its origin task."""
+    """Flags reads of durable memory from a different task than the one that produced it.
+
+    This detector prevents cross-task context contamination (e.g., tool results
+    from Task A leaking into Task B's agent reasoning).
+
+    Attributes:
+        name: The unique identifier for this detector.
+    """
 
     name = "cross_task_contamination"
 
@@ -37,9 +44,24 @@ class CrossTaskContaminationDetector:
         self._severity = severity
 
     def set_current_task(self, task_id: str | None) -> None:
+        """Switch the current active task identifier.
+
+        Args:
+            task_id: The ID of the task context to switch to.
+        """
         self._current_task = task_id
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect read operations for cross-task contamination.
+
+        Args:
+            key: The memory key being accessed.
+            value: The stored value being read.
+            operation: The memory operation being performed. Only screens 'read' operations.
+
+        Returns:
+            DetectionResult: The check outcome, matched=True if cross-task leakage is detected.
+        """
         if operation != "read":
             return DetectionResult(self.name, matched=False)
         mclass = self._registry.get(key)

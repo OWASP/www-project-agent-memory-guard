@@ -56,6 +56,24 @@ class PolicyRule:
 
 @dataclass
 class Policy:
+    """Security policy configuration for MemoryGuard operations.
+
+    A policy dictates the action to take (ALLOW, REDACT, QUARANTINE, or BLOCK)
+    when detectors match security anomalies or prompt injections. It defines key rules,
+    protected keys, and immutable baselines.
+
+    Attributes:
+        default_action: The fallback action when no rules match. Defaults to Action.ALLOW.
+        protected_keys: Glob patterns for keys protected against deletion or modification.
+        immutable_keys: Glob patterns for keys monitored with cryptographic integrity checks.
+        rules: Ordered list of rules to evaluate when scanning keys.
+        version: Policy syntax version. Defaults to 1.
+
+    Example:
+        >>> policy = Policy.strict()
+        >>> policy.decide("prompt_injection", Severity.HIGH, "session.notes")
+        <Action.BLOCK: 'block'>
+    """
     default_action: Action = Action.ALLOW
     protected_keys: tuple[str, ...] = ()
     immutable_keys: tuple[str, ...] = ()
@@ -261,7 +279,23 @@ def _severity_rank(s: Severity) -> int:
 
 
 def load_policy(source: str | Path | dict[str, Any]) -> Policy:
-    """Load a policy from a YAML string, file path, or already-parsed dict."""
+    """Load a security policy from a YAML string, a file path, or a dictionary.
+
+    This function parses declarative policies that dictate the behavior of
+    MemoryGuard when checking memory operations.
+
+    Args:
+        source: The YAML policy configuration. This can be a file path (Path object),
+            a raw YAML string, or an already-parsed dictionary representation of the policy.
+
+    Returns:
+        Policy: The loaded Policy configuration instance.
+
+    Example:
+        >>> from pathlib import Path
+        >>> policy = load_policy("version: 1\\ndefault_action: allow")
+        >>> print(policy.default_action)
+    """
     if isinstance(source, dict):
         return Policy.from_dict(source)
     if isinstance(source, Path):

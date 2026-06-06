@@ -22,7 +22,14 @@ DEFAULT_INJECTION_PATTERNS: tuple[str, ...] = (
 
 
 class PromptInjectionDetector:
-    """Regex-based screen for indirect prompt-injection markers in memory values."""
+    """Regex-based screen for indirect prompt-injection markers in memory values.
+
+    This detector monitors memory inputs for common injection keywords, instructions
+    overrides, jailbreak phrases, and system prompt leakage attempts.
+
+    Attributes:
+        name: The unique identifier for this detector.
+    """
 
     name = "prompt_injection"
 
@@ -35,6 +42,16 @@ class PromptInjectionDetector:
         self._severity = severity
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect a memory value for potential prompt injection patterns.
+
+        Args:
+            key: The memory key being targeted.
+            value: The data value to inspect.
+            operation: The memory operation being performed.
+
+        Returns:
+            DetectionResult: The check result including list of pattern matches if any.
+        """
         text = _stringify(value)
         if not text:
             return DetectionResult(self.name, matched=False)

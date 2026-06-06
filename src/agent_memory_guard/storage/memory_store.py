@@ -16,7 +16,19 @@ class MemoryStore(Protocol):
 
 
 class InMemoryStore:
-    """Reference dict-backed implementation used by tests and examples."""
+    """In-memory dictionary-backed implementation of MemoryStore.
+
+    This reference implementation is used for testing, examples, and simple
+    ephemeral key-value storage.
+
+    Args:
+        initial: Optional dictionary with initial key-value mappings to load.
+            Defaults to None.
+
+    Example:
+        >>> store = InMemoryStore({"session.user": "Alice"})
+        >>> print(store.get("session.user"))
+    """
 
     def __init__(self, initial: dict[str, Any] | None = None) -> None:
         self._data: dict[str, Any] = dict(initial or {})

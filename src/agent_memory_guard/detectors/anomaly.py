@@ -10,7 +10,14 @@ from agent_memory_guard.events import Severity
 
 
 class SizeAnomalyDetector:
-    """Flags memory writes that are unusually large or grow unusually fast."""
+    """Flags memory writes that are unusually large or grow unusually fast.
+
+    This detector mitigates buffer overflow or massive data poisoning attempts
+    by enforcing maximum size limits and detecting abrupt spikes in size.
+
+    Attributes:
+        name: The unique identifier for this detector.
+    """
 
     name = "size_anomaly"
 
@@ -26,6 +33,16 @@ class SizeAnomalyDetector:
         self._severity = severity
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect the size of a memory value.
+
+        Args:
+            key: The memory key being modified.
+            value: The string or raw value to inspect.
+            operation: The memory operation being performed.
+
+        Returns:
+            DetectionResult: The match outcome, including size details if a violation occurs.
+        """
         size = len(_stringify(value).encode("utf-8"))
         previous = self._last_size.get(key)
         self._last_size[key] = size
@@ -52,7 +69,14 @@ class SizeAnomalyDetector:
 
 
 class RapidChangeDetector:
-    """Flags suspiciously high write frequency on a single key (churn attack)."""
+    """Flags suspiciously high write frequency on a single key (churn attack).
+
+    This detector identifies automated loop or denial-of-service attempts
+    affecting key persistence.
+
+    Attributes:
+        name: The unique identifier for this detector.
+    """
 
     name = "rapid_change"
 
@@ -68,6 +92,16 @@ class RapidChangeDetector:
         self._severity = severity
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        """Inspect write frequency for a memory key.
+
+        Args:
+            key: The memory key being updated.
+            value: The value being written.
+            operation: The operation name. Only checks 'write' operations.
+
+        Returns:
+            DetectionResult: The check result including write frequency details.
+        """
         if operation != "write":
             return DetectionResult(self.name, matched=False)
 

@@ -23,7 +23,21 @@ class Snapshot:
 
 
 class SnapshotStore:
-    """Bounded ring buffer of memory snapshots for forensics and rollback."""
+    """Bounded ring buffer of memory snapshots for forensics and rollback.
+
+    This class maintains a historical queue of memory snapshots. It will discard
+    oldest snapshots once the configured capacity threshold is exceeded.
+
+    Args:
+        max_snapshots: The maximum number of snapshots to retain. Defaults to 50.
+
+    Raises:
+        ValueError: If max_snapshots is less than 1.
+
+    Example:
+        >>> store = SnapshotStore(max_snapshots=10)
+        >>> snap = store.capture({"key": "value"}, label="test")
+    """
 
     def __init__(self, max_snapshots: int = 50) -> None:
         if max_snapshots < 1:
