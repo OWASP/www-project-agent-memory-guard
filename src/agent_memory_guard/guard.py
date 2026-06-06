@@ -398,11 +398,11 @@ class MemoryGuard:
             target_class = self._classification.get(key)
 
         committed_value = value
-        self._self_reinforcement_detector._pending_source_class = normalised_source_class
+        self._set_pending_source_class(normalised_source_class)
         try:
             verdicts = self._run_detectors(key, value, operation="write")
         finally:
-            self._self_reinforcement_detector._pending_source_class = SourceClass.UNKNOWN
+            self._set_pending_source_class(SourceClass.UNKNOWN)
         worst = _highest_severity(verdicts)
         decision = self._decide(verdicts, key=key)
 
@@ -795,6 +795,13 @@ class MemoryGuard:
         if hasattr(self._store, "snapshot"):
             return self._store.snapshot()  # type: ignore[no-any-return]
         return {k: v for k, v in self._store.items()}
+
+    def _set_pending_source_class(self, source_class: SourceClass) -> None:
+        for detector in self._detectors:
+            try:
+                setattr(detector, "_pending_source_class", source_class)
+            except Exception:
+                continue
 
 
 _ACTION_RANK = {

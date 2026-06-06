@@ -16,3 +16,4 @@ venv-www-project-agent-memory-guard/
 coverage.xml
 htmlcov/
 site/
+.env
