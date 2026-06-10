@@ -18,15 +18,14 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from agent_memory_guard.detectors import (
-    Detector,
-    DetectionResult,
-    PromptInjectionDetector,
-    SensitiveDataDetector,
     CrossTaskContaminationDetector,
+    DetectionResult,
+    Detector,
+    PromptInjectionDetector,
     SelfReinforcementDetector,
+    SensitiveDataDetector,
 )
 from agent_memory_guard.policies.policy import Policy
 
@@ -65,7 +64,7 @@ class ScanResult:
         return ThreatType.SECRET_LEAKAGE in self.threats
 
 
-_detectors: Optional[list[Detector]] = None
+_detectors: list[Detector] | None = None
 
 
 def _get_detectors() -> list[Detector]:
@@ -83,7 +82,7 @@ def _get_detectors() -> list[Detector]:
 def scan(
     text: str,
     *,
-    policy: Optional[Policy] = None,
+    policy: Policy | None = None,
     include_details: bool = False,
 ) -> ScanResult:
     """Scan text for prompt injection, secrets, and other threats.

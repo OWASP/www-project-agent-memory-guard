@@ -21,15 +21,15 @@ Usage:
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import Literal, Optional
+from dataclasses import dataclass
+from typing import Literal
 
+from agent_memory_guard.detectors import DetectionResult
 from agent_memory_guard.scan import (
     ScanResult,
     ThreatType,
     _get_detectors,
 )
-from agent_memory_guard.detectors import DetectionResult
 
 
 @dataclass
@@ -73,8 +73,8 @@ def scan_tool_output(
         if result.detected and result.confidence >= threshold:
             from agent_memory_guard.detectors import (
                 PromptInjectionDetector,
-                SensitiveDataDetector,
                 SelfReinforcementDetector,
+                SensitiveDataDetector,
             )
             if isinstance(detector, PromptInjectionDetector):
                 threats.append(ThreatType.PROMPT_INJECTION)

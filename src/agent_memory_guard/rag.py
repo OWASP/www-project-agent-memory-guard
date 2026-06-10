@@ -20,15 +20,16 @@ Usage:
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
+from agent_memory_guard.detectors import DetectionResult
 from agent_memory_guard.scan import (
     ScanResult,
     ThreatType,
     _get_detectors,
 )
-from agent_memory_guard.detectors import DetectionResult
 
 
 @dataclass
@@ -75,8 +76,8 @@ def scan_rag_input(
         if result.detected:
             from agent_memory_guard.detectors import (
                 PromptInjectionDetector,
-                SensitiveDataDetector,
                 SelfReinforcementDetector,
+                SensitiveDataDetector,
             )
             if isinstance(detector, PromptInjectionDetector):
                 if ThreatType.PROMPT_INJECTION not in threats:

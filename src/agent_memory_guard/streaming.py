@@ -24,10 +24,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
-from agent_memory_guard.scan import ScanResult, ThreatType, _get_detectors
 from agent_memory_guard.detectors import DetectionResult
+from agent_memory_guard.scan import ThreatType, _get_detectors
 
 
 @dataclass
@@ -90,7 +89,7 @@ class StreamScanner:
         self._total_latency_ns = 0
         self._detectors = _get_detectors()
 
-    def feed(self, chunk: str) -> Optional[StreamAlert]:
+    def feed(self, chunk: str) -> StreamAlert | None:
         """Feed a new chunk into the scanner.
 
         Returns:
@@ -118,8 +117,8 @@ class StreamScanner:
             if result.detected and result.confidence >= self._confidence_threshold:
                 from agent_memory_guard.detectors import (
                     PromptInjectionDetector,
-                    SensitiveDataDetector,
                     SelfReinforcementDetector,
+                    SensitiveDataDetector,
                 )
                 if isinstance(detector, PromptInjectionDetector):
                     threats.append(ThreatType.PROMPT_INJECTION)

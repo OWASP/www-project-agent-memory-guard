@@ -1,13 +1,12 @@
 """OWASP Agent Memory Guard — runtime defense against memory poisoning (ASI06)."""
 
-from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceType
 from agent_memory_guard.classification import (
     DEFAULT_PROMOTION_GRAPH,
     MemoryClass,
     PromotionEdge,
     PromotionRules,
 )
-from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceClass
+from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceClass, SourceType
 from agent_memory_guard.exceptions import (
     ClassificationError,
     IntegrityError,

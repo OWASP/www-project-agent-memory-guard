@@ -21,10 +21,9 @@ Usage (Flask):
 from __future__ import annotations
 
 import json
-import time
-from typing import Callable, Optional, Sequence
+from collections.abc import Sequence
 
-from agent_memory_guard.scan import scan, ScanResult, ThreatType
+from agent_memory_guard.scan import scan
 
 
 class FastAPIGuard:
@@ -34,7 +33,7 @@ class FastAPIGuard:
         self,
         app,
         *,
-        paths: Optional[Sequence[str]] = None,
+        paths: Sequence[str] | None = None,
         block_on_threat: bool = True,
         log_threats: bool = True,
     ):
@@ -109,7 +108,7 @@ class FlaskGuard:
         self,
         app=None,
         *,
-        paths: Optional[Sequence[str]] = None,
+        paths: Sequence[str] | None = None,
         block_on_threat: bool = True,
     ):
         self.paths = set(paths) if paths else None
@@ -121,7 +120,7 @@ class FlaskGuard:
         app.before_request(self._check_request)
 
     def _check_request(self):
-        from flask import request, jsonify, abort
+        from flask import jsonify, request
 
         if self.paths and request.path not in self.paths:
             return None
