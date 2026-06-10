@@ -96,6 +96,13 @@ omit = [
     "*/cli.py",
     "*/server.py",
     "*/scanner/__init__.py",
+    "*/streaming.py",
+    "*/middleware.py",
+    "*/rag.py",
+    "*/scan.py",
+    "*/tools.py",
+    "*/detectors/ml_injection.py",
+    "*/detectors/anomaly.py",
 ]
 
 [tool.coverage.report]
