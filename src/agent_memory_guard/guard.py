@@ -7,7 +7,6 @@ from typing import Any, Callable
 
 from agent_memory_guard.classification import (
     ClassificationRegistry,
-    MemoryClass,
     PromotionRules,
 )
 from agent_memory_guard.detectors.anomaly import (
@@ -19,12 +18,9 @@ from agent_memory_guard.detectors.cross_task import CrossTaskContaminationDetect
 from agent_memory_guard.detectors.injection import PromptInjectionDetector
 from agent_memory_guard.detectors.leakage import SensitiveDataDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
-from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceType
-from agent_memory_guard.exceptions import IntegrityError, PolicyViolation
 from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
-from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceClass
+from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceClass, SourceType
 from agent_memory_guard.exceptions import (
-    ClassificationError,
     IntegrityError,
     PolicyViolation,
 )
@@ -214,6 +210,15 @@ class MemoryGuard:
     ) -> Action:
         """Inspect and (if policy allows) commit a write. Returns the action taken."""
         committed_value = value
+        # Map SourceType to SourceClass for self-reinforcement detection
+        _source_type_to_class = {
+            SourceType.USER_INPUT: SourceClass.USER_INPUT,
+            SourceType.TOOL_OUTPUT: SourceClass.EXTERNAL_TOOL,
+            SourceType.MODEL_INFERENCE: SourceClass.AGENT_AUTHORED,
+            SourceType.SYSTEM: SourceClass.SYSTEM,
+            SourceType.UNKNOWN: SourceClass.UNKNOWN,
+        }
+        normalised_source_class = _source_type_to_class.get(source_type, SourceClass.UNKNOWN)
         self._self_reinforcement_detector._pending_source_class = normalised_source_class
         try:
             verdicts = self._run_detectors(key, value, operation="write")
@@ -275,14 +280,6 @@ class MemoryGuard:
         # self-poisoning loop.
         if normalised_source_class != SourceClass.AGENT_AUTHORED:
             self._self_reinforcement_detector.note_independent_write(key)
-
-        if target_class is not None:
-            existing_task = self._classification.task_of(key)
-            self._classification.set(
-                key,
-                target_class,
-                task_id=task_id if task_id is not None else existing_task or self._current_task,
-            )
 
         if key in self._policy.immutable_keys and not self._integrity.has_baseline(key):
             self._integrity.baseline(key, committed_value)
