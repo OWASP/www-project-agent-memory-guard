@@ -12,7 +12,7 @@
 
 ### 📦 5,493+ total downloads
 
-[![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/clones-3,338-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) [![Unique Cloners](https://img.shields.io/badge/unique_cloners-979-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
+[![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/clones-3,338-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) [![Clones](https://img.shields.io/badge/clones-253-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic) [![Unique Cloners](https://img.shields.io/badge/unique_cloners-979-blue?logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
 </div>
 
