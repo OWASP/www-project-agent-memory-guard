@@ -15,15 +15,48 @@ jobs:
         with:
           token: ${{ secrets.SECRET_TOKEN }}
 
-      - name: Fetch PyPI download counts
+      - name: Fetch download counts
         id: downloads
         run: |
-          # Get total downloads from pypistats
-          AMG=$(curl -s "https://pypistats.org/api/packages/agent-memory-guard/overall?mirrors=true" | python3 -c "import json,sys; d=json.load(sys.stdin); print(sum(r['downloads'] for r in d['data']))")
-          sleep 2
-          LANGCHAIN=$(curl -s "https://pypistats.org/api/packages/langchain-agent-memory-guard/overall?mirrors=true" | python3 -c "import json,sys; d=json.load(sys.stdin); print(sum(r['downloads'] for r in d['data']))")
+          # Get total downloads from pepy.tech badges (all-time, accurate)
+          curl -sL "https://static.pepy.tech/badge/agent-memory-guard" -o /tmp/amg_badge.svg
+          curl -sL "https://static.pepy.tech/badge/langchain-agent-memory-guard" -o /tmp/lc_badge.svg
           
-          # Get clone count from gist
+          # Parse badge SVG values (e.g., "1.3k", "594", "2k")
+          AMG=$(python3 -c "
+          import re
+          with open('/tmp/amg_badge.svg') as f:
+              svg = f.read()
+          # Find the download count in the SVG text
+          matches = re.findall(r'>([0-9,.]+[kKmM]?)</text>', svg)
+          val = matches[-1] if matches else '0'
+          val = val.replace(',','')
+          if 'k' in val.lower():
+              num = float(val.lower().replace('k','')) * 1000
+          elif 'm' in val.lower():
+              num = float(val.lower().replace('m','')) * 1000000
+          else:
+              num = float(val)
+          print(int(num))
+          ")
+          
+          LANGCHAIN=$(python3 -c "
+          import re
+          with open('/tmp/lc_badge.svg') as f:
+              svg = f.read()
+          matches = re.findall(r'>([0-9,.]+[kKmM]?)</text>', svg)
+          val = matches[-1] if matches else '0'
+          val = val.replace(',','')
+          if 'k' in val.lower():
+              num = float(val.lower().replace('k','')) * 1000
+          elif 'm' in val.lower():
+              num = float(val.lower().replace('m','')) * 1000000
+          else:
+              num = float(val)
+          print(int(num))
+          ")
+          
+          # Get clone count from gist (maintained by clone.yml action)
           CLONES=$(curl -s "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'])")
           
           TOTAL=$((AMG + LANGCHAIN + CLONES))
@@ -31,7 +64,7 @@ jobs:
           echo "langchain=$LANGCHAIN" >> $GITHUB_OUTPUT
           echo "clones=$CLONES" >> $GITHUB_OUTPUT
           echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          echo "Total: $TOTAL (AMG: $AMG, LangChain: $LANGCHAIN, Clones: $CLONES)"
+          echo "Total: $TOTAL (AMG PyPI: $AMG, LangChain PyPI: $LANGCHAIN, Clones: $CLONES)"
 
       - name: Update README with latest total
         run: |
