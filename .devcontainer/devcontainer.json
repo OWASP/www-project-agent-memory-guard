@@ -1,0 +1,36 @@
+{
+  "name": "Secure AI Agent Starter (OWASP Agent Memory Guard)",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "pip install agent-memory-guard[all] mem0ai crewai langchain langgraph openai jupyter && cp .devcontainer/welcome.md /tmp/welcome.md",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "python.analysis.typeCheckingMode": "basic"
+      }
+    },
+    "codespaces": {
+      "openFiles": [
+        ".devcontainer/welcome.md",
+        "demo.py"
+      ]
+    }
+  },
+  "forwardPorts": [8888],
+  "portsAttributes": {
+    "8888": {
+      "label": "Jupyter Notebook",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}
