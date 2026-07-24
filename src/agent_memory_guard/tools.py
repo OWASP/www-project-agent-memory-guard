@@ -21,6 +21,15 @@ Usage:
 from __future__ import annotations
 
 import time
+from agent_memory_guard.events import Severity
+
+_SEVERITY_TO_CONFIDENCE = {
+    Severity.INFO: 0.25,
+    Severity.LOW: 0.40,
+    Severity.MEDIUM: 0.70,
+    Severity.HIGH: 0.90,
+    Severity.CRITICAL: 1.00,
+}
 from dataclasses import dataclass
 from typing import Literal
 
@@ -69,8 +78,14 @@ def scan_tool_output(
     max_confidence = 0.0
 
     for detector in detectors:
-        result: DetectionResult = detector.detect(output)
-        if result.detected and result.confidence >= threshold:
+        result = detector.inspect(
+    key=tool_name,
+    value=output,
+    operation="read",
+)
+        confidence = _SEVERITY_TO_CONFIDENCE.get(result.severity, 0.0)
+
+    if result.matched and confidence >= threshold:
             from agent_memory_guard.detectors import (
                 PromptInjectionDetector,
                 SelfReinforcementDetector,
@@ -82,7 +97,7 @@ def scan_tool_output(
                 threats.append(ThreatType.SECRET_LEAKAGE)
             elif isinstance(detector, SelfReinforcementDetector):
                 threats.append(ThreatType.SELF_REINFORCEMENT)
-            max_confidence = max(max_confidence, result.confidence)
+            max_confidence = max(max_confidence, confidence)
 
     elapsed_us = (time.perf_counter_ns() - start) // 1000
     blocked = len(threats) > 0
