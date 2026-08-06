@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: gh login
         run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
@@ -48,7 +48,9 @@ jobs:
 
       - name: update clone.json
         run: |
-          curl https://raw.githubusercontent.com/MShawon/github-clone-count-badge/master/main.py > main.py
+          curl --fail --silent --show-error \
+            https://raw.githubusercontent.com/MShawon/github-clone-count-badge/1ee27f9cbddc9d216ccbde2758ada05cbe1e4cfa/main.py \
+            > main.py
           python3 main.py
 
       - name: Update gist with latest count
@@ -85,6 +87,6 @@ jobs:
           fi
 
       - name: Push
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
