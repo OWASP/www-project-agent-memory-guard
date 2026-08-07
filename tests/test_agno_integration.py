@@ -7,11 +7,11 @@ import pytest
 
 agno = pytest.importorskip("agno")
 
-from agno.db.schemas import UserMemory
-from agno.db.sqlite import SqliteDb
+from agno.db.schemas import UserMemory  # noqa: E402
+from agno.db.sqlite import SqliteDb  # noqa: E402
 
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
-from agent_memory_guard.integrations.agno import GuardedMemoryManager
+from agent_memory_guard import MemoryGuard, Policy, PolicyViolation  # noqa: E402
+from agent_memory_guard.integrations.agno import GuardedMemoryManager  # noqa: E402
 
 
 @pytest.fixture()
