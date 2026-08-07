@@ -583,10 +583,13 @@ class MemoryGuard:
         if snap is None:
             raise LookupError("No snapshot available for rollback")
 
-        for key in list(self._store.keys()):
-            self._store.delete(key)
-        for key, value in snap.data.items():
-            self._store.set(key, value)
+        if hasattr(self._store, "restore"):
+            self._store.restore(snap.data)  # type: ignore[union-attr]
+        else:
+            for key in list(self._store.keys()):
+                self._store.delete(key)
+            for key, value in snap.data.items():
+                self._store.set(key, value)
 
         self._emit(
             detector="rollback",

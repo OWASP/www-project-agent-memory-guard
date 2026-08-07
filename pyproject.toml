@@ -55,8 +55,9 @@ all = [
     "torch>=2.0",
     "langchain-core>=0.1",
 ]
-test = ["pytest>=7.0", "coverage>=7.0", "httpx>=0.24"]
-dev = ["ruff>=0.4", "mypy>=1.0", "coverage>=7.0", "pytest>=7.0", "httpx>=0.24"]
+redis = ["redis[hiredis]>=5.0.0"]
+test = ["pytest>=7.0", "coverage>=7.0", "httpx>=0.24", "fakeredis>=2.0.0"]
+dev = ["ruff>=0.4", "mypy>=1.0", "coverage>=7.0", "pytest>=7.0", "httpx>=0.24", "fakeredis>=2.0.0"]
 docs = ["mkdocs>=1.5", "mkdocs-material>=9.0", "mkdocstrings[python]>=0.24"]
 
 [project.urls]
