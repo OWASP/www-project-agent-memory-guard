@@ -16,6 +16,15 @@ Usage:
 from __future__ import annotations
 
 import time
+from agent_memory_guard.events import Severity
+
+_SEVERITY_TO_CONFIDENCE = {
+    Severity.INFO: 0.25,
+    Severity.LOW: 0.40,
+    Severity.MEDIUM: 0.70,
+    Severity.HIGH: 0.90,
+    Severity.CRITICAL: 1.00,
+}
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -105,8 +114,12 @@ def scan(
     max_confidence = 0.0
 
     for detector in detectors:
-        result: DetectionResult = detector.detect(text)
-        if result.detected:
+        result: DetectionResult = detector.inspect(
+    key="scan",
+    value=text,
+    operation="read",
+)
+        if result.matched:
             if isinstance(detector, PromptInjectionDetector):
                 threats.append(ThreatType.PROMPT_INJECTION)
             elif isinstance(detector, SensitiveDataDetector):
@@ -116,15 +129,19 @@ def scan(
             elif isinstance(detector, SelfReinforcementDetector):
                 threats.append(ThreatType.SELF_REINFORCEMENT)
 
-            max_confidence = max(max_confidence, result.confidence)
+            max_confidence = max(
+    max_confidence,
+    _SEVERITY_TO_CONFIDENCE.get(result.severity, 0.0),
+)
 
         if include_details:
             details.append({
-                "detector": detector.__class__.__name__,
-                "detected": result.detected,
-                "confidence": result.confidence,
-                "reason": getattr(result, "reason", None),
-            })
+    "detector": result.detector,
+    "matched": result.matched,
+    "severity": result.severity.value,
+    "message": result.message,
+    "metadata": result.metadata,
+})
 
     elapsed_us = (time.perf_counter_ns() - start) // 1000
 

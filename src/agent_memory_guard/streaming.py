@@ -23,6 +23,15 @@ Usage:
 from __future__ import annotations
 
 import time
+from agent_memory_guard.events import Severity
+
+_SEVERITY_TO_CONFIDENCE = {
+    Severity.INFO: 0.25,
+    Severity.LOW: 0.40,
+    Severity.MEDIUM: 0.70,
+    Severity.HIGH: 0.90,
+    Severity.CRITICAL: 1.00,
+}
 from dataclasses import dataclass, field
 
 from agent_memory_guard.detectors import DetectionResult
@@ -113,8 +122,14 @@ class StreamScanner:
         max_confidence = 0.0
 
         for detector in self._detectors:
-            result: DetectionResult = detector.detect(self._buffer)
-            if result.detected and result.confidence >= self._confidence_threshold:
+            result = detector.inspect(
+    key="stream",
+    value=self._buffer,
+    operation="read",
+)
+            confidence = _SEVERITY_TO_CONFIDENCE.get(result.severity, 0.0)
+
+            if result.matched and confidence >= self._confidence_threshold:
                 from agent_memory_guard.detectors import (
                     PromptInjectionDetector,
                     SelfReinforcementDetector,
@@ -126,7 +141,7 @@ class StreamScanner:
                     threats.append(ThreatType.SECRET_LEAKAGE)
                 elif isinstance(detector, SelfReinforcementDetector):
                     threats.append(ThreatType.SELF_REINFORCEMENT)
-                max_confidence = max(max_confidence, result.confidence)
+                max_confidence = max(max_confidence, confidence)
 
         self._total_latency_ns += time.perf_counter_ns() - start
 

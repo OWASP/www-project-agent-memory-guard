@@ -20,6 +20,15 @@ Usage:
 from __future__ import annotations
 
 import time
+from agent_memory_guard.events import Severity
+
+_SEVERITY_TO_CONFIDENCE = {
+    Severity.INFO: 0.25,
+    Severity.LOW: 0.40,
+    Severity.MEDIUM: 0.70,
+    Severity.HIGH: 0.90,
+    Severity.CRITICAL: 1.00,
+}
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -72,8 +81,13 @@ def scan_rag_input(
             break
 
     for detector in detectors:
-        result: DetectionResult = detector.detect(content)
-        if result.detected:
+        result = detector.inspect(
+    key=source,
+    value=content,
+    operation="read",
+)
+        confidence = _SEVERITY_TO_CONFIDENCE.get(result.severity, 0.0)
+        if result.matched:
             from agent_memory_guard.detectors import (
                 PromptInjectionDetector,
                 SelfReinforcementDetector,
@@ -86,7 +100,7 @@ def scan_rag_input(
                 threats.append(ThreatType.SECRET_LEAKAGE)
             elif isinstance(detector, SelfReinforcementDetector):
                 threats.append(ThreatType.SELF_REINFORCEMENT)
-            max_confidence = max(max_confidence, result.confidence)
+            max_confidence = max(max_confidence, confidence)
 
     elapsed_us = (time.perf_counter_ns() - start) // 1000
 
