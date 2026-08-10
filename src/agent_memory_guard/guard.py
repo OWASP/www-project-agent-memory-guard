@@ -584,7 +584,7 @@ class MemoryGuard:
             raise LookupError("No snapshot available for rollback")
 
         if hasattr(self._store, "restore"):
-            self._store.restore(snap.data)  # type: ignore[union-attr]
+            self._store.restore(snap.data)
         else:
             for key in list(self._store.keys()):
                 self._store.delete(key)

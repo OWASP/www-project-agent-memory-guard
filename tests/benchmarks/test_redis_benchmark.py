@@ -15,8 +15,8 @@ import pytest
 
 fakeredis = pytest.importorskip("fakeredis", reason="fakeredis not installed")
 
-from agent_memory_guard.storage.memory_store import InMemoryStore
-from agent_memory_guard.storage.redis_store import RedisMemoryStore
+from agent_memory_guard.storage.memory_store import InMemoryStore  # noqa: E402
+from agent_memory_guard.storage.redis_store import RedisMemoryStore  # noqa: E402
 
 N = 1000  # operations per benchmark
 
@@ -113,7 +113,7 @@ def test_snapshot_benchmark(capsys):
     redis_times = _measure(redis.snapshot, 200)
 
     print(f"\n{'='*60}")
-    print(f"  SNAPSHOT benchmark  (100 keys, 200 calls)")
+    print("  SNAPSHOT benchmark  (100 keys, 200 calls)")
     print(f"{'='*60}")
     with capsys.disabled():
         _report("InMemoryStore.snapshot()", mem_times)

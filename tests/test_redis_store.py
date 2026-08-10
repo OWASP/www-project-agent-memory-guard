@@ -7,9 +7,9 @@ import pytest
 
 fakeredis = pytest.importorskip("fakeredis", reason="fakeredis not installed")
 
-from agent_memory_guard import MemoryGuard, Policy
-from agent_memory_guard.exceptions import IntegrityError, PolicyViolation
-from agent_memory_guard.storage.redis_store import RedisMemoryStore
+from agent_memory_guard import MemoryGuard, Policy  # noqa: E402
+from agent_memory_guard.exceptions import IntegrityError, PolicyViolation  # noqa: E402
+from agent_memory_guard.storage.redis_store import RedisMemoryStore  # noqa: E402
 
 
 @pytest.fixture()

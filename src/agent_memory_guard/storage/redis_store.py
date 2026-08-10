@@ -27,6 +27,13 @@ class RedisMemoryStore:
     exactly. Non-serializable types (e.g. datetime) are coerced to str via
     ``default=str`` and will deserialize as strings, not their original type.
 
+    .. warning:: **Do not combine** ``default_ttl`` with keys that are declared as
+        ``immutable_keys`` or ``protected_keys`` in a :class:`MemoryGuard` policy.
+        When a TTL expires, Redis silently deletes the key and its integrity baseline
+        inside ``MemoryGuard`` becomes stale. A subsequent write to that key will be
+        treated as a first-time write, bypassing immutability enforcement without
+        raising any error. Keep TTL-bound keys and policy-protected keys disjoint.
+
     Args:
         url: Redis connection URL (e.g. ``"redis://localhost:6379/0"``).
         redis_client: Pre-built client instance — takes priority over all other
@@ -34,6 +41,10 @@ class RedisMemoryStore:
         namespace: Key prefix for multi-tenant isolation (default: ``"amg"``).
             All Redis keys are stored as ``"{namespace}:{key}"``.
         default_ttl: Optional TTL in seconds applied to every ``set()`` call.
+            **Do not use this for keys that are also declared as** ``immutable_keys``
+            **or** ``protected_keys`` **in a** ``MemoryGuard`` **policy.** TTL expiry
+            silently removes the key from Redis, causing the guard's integrity baseline
+            to go stale and immutability checks to reset on the next write.
         sentinels: List of ``(host, port)`` tuples for Redis Sentinel.
         sentinel_service_name: Master service name (required when using sentinels).
         decode_responses: Passed to the Redis client; must stay ``True`` for JSON
