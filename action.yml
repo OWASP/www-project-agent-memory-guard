@@ -1,10 +1,12 @@
-name: 'Agent Memory Guard Scanner'
-description: 'Scan AI agent projects for memory poisoning vulnerabilities'
+name: 'OWASP Agent Memory Guard'
+description: 'Scan Python AI-agent projects for memory-poisoning patterns and upload SARIF findings'
 author: 'OWASP Agent Memory Guard'
+
 
 branding:
   icon: 'shield'
   color: 'red'
+
 
 inputs:
   policy:
@@ -20,6 +22,7 @@ inputs:
     required: false
     default: '.'
 
+
 runs:
   using: 'composite'
   steps:
@@ -33,6 +36,7 @@ runs:
           --fail-on "${{ inputs.fail-on }}" \
           --output sarif \
           --output-file results.sarif
+
 
     - name: Upload SARIF results
       uses: github/codeql-action/upload-sarif@v3
