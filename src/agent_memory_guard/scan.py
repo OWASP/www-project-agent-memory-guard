@@ -27,6 +27,7 @@ from agent_memory_guard.detectors import (
     SelfReinforcementDetector,
     SensitiveDataDetector,
 )
+from agent_memory_guard.events import Severity
 from agent_memory_guard.policies.policy import Policy
 
 
@@ -62,6 +63,26 @@ class ScanResult:
     @property
     def has_secrets(self) -> bool:
         return ThreatType.SECRET_LEAKAGE in self.threats
+
+
+_SEVERITY_CONFIDENCE: dict[Severity, float] = {
+    Severity.CRITICAL: 1.0,
+    Severity.HIGH: 0.85,
+    Severity.MEDIUM: 0.6,
+    Severity.LOW: 0.3,
+    Severity.INFO: 0.1,
+}
+
+
+def _confidence_from_result(result: DetectionResult) -> float:
+    """Map a DetectionResult to a confidence score.
+
+    When matched, confidence is derived from the severity level.
+    When not matched, confidence is 0.0.
+    """
+    if not result.matched:
+        return 0.0
+    return _SEVERITY_CONFIDENCE.get(result.severity, 0.5)
 
 
 _detectors: list[Detector] | None = None
@@ -105,8 +126,8 @@ def scan(
     max_confidence = 0.0
 
     for detector in detectors:
-        result: DetectionResult = detector.detect(text)
-        if result.detected:
+        result: DetectionResult = detector.inspect("scan", text, operation="scan")
+        if result.matched:
             if isinstance(detector, PromptInjectionDetector):
                 threats.append(ThreatType.PROMPT_INJECTION)
             elif isinstance(detector, SensitiveDataDetector):
@@ -116,14 +137,14 @@ def scan(
             elif isinstance(detector, SelfReinforcementDetector):
                 threats.append(ThreatType.SELF_REINFORCEMENT)
 
-            max_confidence = max(max_confidence, result.confidence)
+            max_confidence = max(max_confidence, _confidence_from_result(result))
 
         if include_details:
             details.append({
                 "detector": detector.__class__.__name__,
-                "detected": result.detected,
-                "confidence": result.confidence,
-                "reason": getattr(result, "reason", None),
+                "detected": result.matched,
+                "confidence": _confidence_from_result(result),
+                "reason": getattr(result, "message", None),
             })
 
     elapsed_us = (time.perf_counter_ns() - start) // 1000
