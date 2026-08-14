@@ -26,10 +26,19 @@ jobs:
             echo "::error::The SECRET_TOKEN repository secret is not set. Create a classic personal access token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and save it as SECRET_TOKEN under Settings → Secrets and variables → Actions."
             exit 1
           fi
-          if ! gh auth status --hostname github.com; then
-            echo "::error::GitHub rejected the SECRET_TOKEN personal access token (expired or revoked). Generate a new classic token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and update the SECRET_TOKEN secret under Settings → Secrets and variables → Actions."
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit)
+          if [ "$status" != "200" ]; then
+            echo "::error::GitHub rejected the SECRET_TOKEN personal access token (HTTP $status — expired or revoked). Generate a new classic token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and update the SECRET_TOKEN secret under Settings → Secrets and variables → Actions."
             exit 1
           fi
+          scopes=$(curl -fsSI -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit | tr -d '\r' | grep -i '^x-oauth-scopes:' | cut -d: -f2-)
+          echo "Token is valid. Scopes:$scopes"
+          for need in repo gist; do
+            if ! echo "$scopes" | grep -qw "$need"; then
+              echo "::error::SECRET_TOKEN is valid but missing the '$need' scope. It must be a CLASSIC personal access token with 'repo' and 'gist' scopes (fine-grained tokens cannot access gists). Edit the token's scopes or generate a new one at https://github.com/settings/tokens, then update the SECRET_TOKEN secret."
+              exit 1
+            fi
+          done
 
       - name: parse latest clone count
         run: |
