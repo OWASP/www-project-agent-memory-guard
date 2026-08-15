@@ -24,7 +24,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from agent_memory_guard.detectors import DetectionResult
+from agent_memory_guard.detectors import (
+    DetectionResult,
+    detection_confidence,
+    scan_text,
+)
 from agent_memory_guard.scan import (
     ScanResult,
     ThreatType,
@@ -72,8 +76,8 @@ def scan_rag_input(
             break
 
     for detector in detectors:
-        result: DetectionResult = detector.detect(content)
-        if result.detected:
+        result: DetectionResult = scan_text(detector, content)
+        if result.matched:
             from agent_memory_guard.detectors import (
                 PromptInjectionDetector,
                 SelfReinforcementDetector,
@@ -86,7 +90,7 @@ def scan_rag_input(
                 threats.append(ThreatType.SECRET_LEAKAGE)
             elif isinstance(detector, SelfReinforcementDetector):
                 threats.append(ThreatType.SELF_REINFORCEMENT)
-            max_confidence = max(max_confidence, result.confidence)
+            max_confidence = max(max_confidence, detection_confidence(result))
 
     elapsed_us = (time.perf_counter_ns() - start) // 1000
 

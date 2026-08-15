@@ -25,7 +25,11 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from agent_memory_guard.detectors import DetectionResult
+from agent_memory_guard.detectors import (
+    DetectionResult,
+    detection_confidence,
+    scan_text,
+)
 from agent_memory_guard.scan import ThreatType, _get_detectors
 
 
@@ -113,8 +117,8 @@ class StreamScanner:
         max_confidence = 0.0
 
         for detector in self._detectors:
-            result: DetectionResult = detector.detect(self._buffer)
-            if result.detected and result.confidence >= self._confidence_threshold:
+            result: DetectionResult = scan_text(detector, self._buffer)
+            if result.matched and detection_confidence(result) >= self._confidence_threshold:
                 from agent_memory_guard.detectors import (
                     PromptInjectionDetector,
                     SelfReinforcementDetector,
@@ -126,7 +130,7 @@ class StreamScanner:
                     threats.append(ThreatType.SECRET_LEAKAGE)
                 elif isinstance(detector, SelfReinforcementDetector):
                     threats.append(ThreatType.SELF_REINFORCEMENT)
-                max_confidence = max(max_confidence, result.confidence)
+                max_confidence = max(max_confidence, detection_confidence(result))
 
         self._total_latency_ns += time.perf_counter_ns() - start
 
