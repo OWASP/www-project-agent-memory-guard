@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.owasp/agent-memory-guard",
+  "description": "OWASP runtime defense for AI agent memory: scan for prompt injection, secret leakage, poisoning",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/OWASP/www-project-agent-memory-guard",
+    "source": "github"
+  },
+  "websiteUrl": "https://owasp.org/www-project-agent-memory-guard/",
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "amg-mcp-server",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
