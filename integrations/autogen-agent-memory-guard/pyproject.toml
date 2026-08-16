@@ -10,7 +10,11 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"
 authors = [
-    {name = "OWASP Agent Memory Guard Contributors"},
+    {name = "Vaishnavi Gudur", email = "gudur.vaishnavi@gmail.com"},
+    {name = "Anshul Rajkumar"},
+]
+maintainers = [
+    {name = "Vaishnavi Gudur", email = "gudur.vaishnavi@gmail.com"},
 ]
 keywords = ["autogen", "owasp", "ai-security", "agent-memory", "memory-poisoning", "prompt-injection"]
 classifiers = [

@@ -6,7 +6,11 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    { name = "Vaishnavi Gudur", email = "vgudur.dev@gmail.com" },
+    { name = "Vaishnavi Gudur", email = "gudur.vaishnavi@gmail.com" },
+    { name = "Anshul Rajkumar" },
+]
+maintainers = [
+    { name = "Vaishnavi Gudur", email = "gudur.vaishnavi@gmail.com" },
 ]
 keywords = ["mcp", "security", "ai-agents", "memory-poisoning", "owasp", "prompt-injection"]
 classifiers = [
