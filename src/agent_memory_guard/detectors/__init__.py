@@ -12,6 +12,9 @@ from agent_memory_guard.detectors.cross_task import CrossTaskContaminationDetect
 from agent_memory_guard.detectors.excessive_autonomy import ExcessiveAutonomyDetector
 from agent_memory_guard.detectors.injection import PromptInjectionDetector
 from agent_memory_guard.detectors.leakage import SensitiveDataDetector
+from agent_memory_guard.detectors.memory_persistence_injection import (
+    MemoryPersistenceInjectionDetector,
+)
 from agent_memory_guard.detectors.privilege_escalation import PrivilegeEscalationDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
 from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
@@ -28,6 +31,7 @@ __all__ = [
     "Detector",
     "DetectionResult",
     "PromptInjectionDetector",
+    "MemoryPersistenceInjectionDetector",
     "SensitiveDataDetector",
     "SizeAnomalyDetector",
     "RapidChangeDetector",
