@@ -12,16 +12,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.SECRET_TOKEN }}
 
       - name: Fetch download counts
         id: downloads
         run: |
+          set -euo pipefail
           # Get total downloads from pepy.tech badges (all-time, accurate)
-          curl -sL "https://static.pepy.tech/badge/agent-memory-guard" -o /tmp/amg_badge.svg
-          curl -sL "https://static.pepy.tech/badge/langchain-agent-memory-guard" -o /tmp/lc_badge.svg
-          
+          curl -fsSL "https://static.pepy.tech/badge/agent-memory-guard" -o /tmp/amg_badge.svg
+          curl -fsSL "https://static.pepy.tech/badge/langchain-agent-memory-guard" -o /tmp/lc_badge.svg
+
           # Parse badge SVG values (e.g., "1.3k", "594", "2k")
           AMG=$(python3 -c "
           import re
@@ -39,7 +38,7 @@ jobs:
               num = float(val)
           print(int(num))
           ")
-          
+
           LANGCHAIN=$(python3 -c "
           import re
           with open('/tmp/lc_badge.svg') as f:
@@ -55,10 +54,10 @@ jobs:
               num = float(val)
           print(int(num))
           ")
-          
+
           # Get clone count from gist (maintained by clone.yml action)
-          CLONES=$(curl -s "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'])")
-          
+          CLONES=$(curl -fsS "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'])")
+
           TOTAL=$((AMG + LANGCHAIN + CLONES))
           echo "amg=$AMG" >> $GITHUB_OUTPUT
           echo "langchain=$LANGCHAIN" >> $GITHUB_OUTPUT
@@ -68,12 +67,24 @@ jobs:
 
       - name: Update README with latest total
         run: |
+          set -euo pipefail
           TOTAL=${{ steps.downloads.outputs.total }}
+          CLONES=${{ steps.downloads.outputs.clones }}
           # Round down to nearest 100 for display
           DISPLAY=$(python3 -c "print(f'{int($TOTAL / 100) * 100:,}+')")
+          ROUNDED=$(python3 -c "print(int($TOTAL / 100) * 100)")
+          # The all-time count can never decrease. A drop means a badge or the
+          # gist failed to parse, so refuse to publish a wrong number.
+          CURRENT=$(grep -o '### 📦 [0-9][0-9,]*+ total downloads' README.md | grep -o '[0-9][0-9,]*' | head -1 | tr -d ',')
+          if [ -n "$CURRENT" ] && [ "$ROUNDED" -lt "$CURRENT" ]; then
+            echo "::error::Computed total ($TOTAL) is below the published count ($CURRENT). A download badge or the clone-count gist likely failed to parse — not updating README."
+            exit 1
+          fi
           # Update the downloads line in README
           sed -i "s/### 📦 [0-9,]*+ total downloads/### 📦 $DISPLAY total downloads/" README.md
-          
+          # Keep the static clones badge in sync with the live gist count
+          sed -i "s|/badge/clones-[0-9]*-blue|/badge/clones-$CLONES-blue|" README.md
+
       - name: Commit and push if changed
         run: |
           git config --global user.name "GitHub Action"

@@ -2,22 +2,48 @@ name: GitHub Clone Count Update Everyday
 
 on:
   schedule:
-    - cron: "0 */24 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    # gh and curl authenticate with this token. It must be a classic personal
+    # access token with 'repo' and 'gist' scopes — the traffic API and gist
+    # updates are not accessible to the workflow's built-in GITHUB_TOKEN.
+    env:
+      GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: gh login
-        run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
+      - uses: actions/checkout@v4
+
+      - name: verify SECRET_TOKEN is valid
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The SECRET_TOKEN repository secret is not set. Create a classic personal access token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and save it as SECRET_TOKEN under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit)
+          if [ "$status" != "200" ]; then
+            echo "::error::GitHub rejected the SECRET_TOKEN personal access token (HTTP $status — expired or revoked). Generate a new classic token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and update the SECRET_TOKEN secret under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          scopes=$(curl -fsSI -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit | tr -d '\r' | grep -i '^x-oauth-scopes:' | cut -d: -f2-)
+          echo "Token is valid. Scopes:$scopes"
+          for need in repo gist; do
+            if ! echo "$scopes" | grep -qw "$need"; then
+              echo "::error::SECRET_TOKEN is valid but missing the '$need' scope. It must be a CLASSIC personal access token with 'repo' and 'gist' scopes (fine-grained tokens cannot access gists). Edit the token's scopes or generate a new one at https://github.com/settings/tokens, then update the SECRET_TOKEN secret."
+              exit 1
+            fi
+          done
 
       - name: parse latest clone count
         run: |
-          curl --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
+          curl -fsS \
+            -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/traffic/clones \
             > clone.json
@@ -48,17 +74,17 @@ jobs:
 
       - name: update clone.json
         run: |
-          curl https://raw.githubusercontent.com/MShawon/github-clone-count-badge/master/main.py > main.py
+          curl -fsS https://raw.githubusercontent.com/MShawon/github-clone-count-badge/master/main.py > main.py
           python3 main.py
 
       - name: Update gist with latest count
         run: |
           content=$(sed -e 's/\\/\\\\/g' -e 's/\t/\\t/g' -e 's/\"/\\"/g' -e 's/\r//g' "clone.json" | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')
           echo '{"description": "${{ github.repository }} clone statistics", "files": {"clone.json": {"content": "'"$content"'"}}}' > post_clone.json
-          curl -s -X PATCH \
-            --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
+          curl -fsS -X PATCH \
+            -H "Authorization: token $GH_TOKEN" \
             -H "Content-Type: application/json" \
-            -d @post_clone.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }} > /dev/null 2>&1
+            -d @post_clone.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }} > /dev/null
 
           if [ ! -f CLONE.md ]; then
             shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
@@ -77,7 +103,7 @@ jobs:
             ```html' >> CLONE.md
             echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
             echo '```' >> CLONE.md
-            
+
             git add CLONE.md
             git config --global user.name "GitHub Action"
             git config --global user.email "action@github.com"
@@ -88,3 +114,4 @@ jobs:
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
