@@ -13,11 +13,15 @@ type: software
 authors:
   - given-names: Vaishnavi
     family-names: Gudur
+    email: gudur.vaishnavi@gmail.com
+    affiliation: "OWASP Agent Memory Guard Project"
+  - given-names: Anshul
+    family-names: Rajkumar
     affiliation: "OWASP Agent Memory Guard Project"
 repository-code: "https://github.com/OWASP/www-project-agent-memory-guard"
 url: "https://owasp.org/www-project-agent-memory-guard/"
 license: Apache-2.0
-version: "0.2.2"
+version: "0.3.0"
 keywords:
   - LLM agents
   - agent security
@@ -27,4 +31,3 @@ keywords:
   - ASI06
   - runtime defense
   - benchmark
-

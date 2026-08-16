@@ -2,10 +2,10 @@
 
 layout: col-sidebar
 title: OWASP Agent Memory Guard
-tags: example-tag
+tags: agent-memory-guard, ai-security, agentic-ai, memory-poisoning, asi06
 level: 2
 type: code
-pitch: A very brief, one-line description of your project
+pitch: The first open-source runtime defense against memory poisoning in AI agents — the reference implementation for OWASP ASI06.
 
 ---
 
@@ -22,6 +22,16 @@ Agent Memory Guard provides a runtime defense layer that:
 * Integrates as drop-in middleware for popular agentic AI frameworks
 
 The project directly addresses ASI06: Memory Poisoning from the OWASP Top 10 for Agentic Applications, providing the reference implementation that the risk definition currently lacks.
+
+### Leaders
+
+* [Vaishnavi Gudur](mailto:gudur.vaishnavi@gmail.com) — Project Creator and Leader
+* Anshul Rajkumar — Co-Leader
+
+### Recognition
+
+* Referenced in the MITRE ATLAS "Memory Hardening" mitigation as an open-source implementation of memory-hardening controls.
+* Featured by Help Net Security, "OWASP Agent Memory Guard: Stop AI agents from being weaponized through their own memory" (June 2026).
 
 ### Road Map
 Q1 2026: Set up OWASP project page, transfer repo to OWASP GitHub, recruit co-leader, publish v0.2.1 with OWASP branding.

@@ -10,7 +10,7 @@
 
 <div align="center">
 
-### 📦 15,200+ total downloads
+### 📦 15,709+ total downloads
 
 [![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) ![Clones](https://img.shields.io/badge/clones-8347-blue) [![Unique Cloners](https://img.shields.io/badge/dynamic/json?color=success&label=Unique%20Cloners&query=uniques&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
@@ -37,6 +37,9 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/LICENSE.md)
 [![OWASP Incubator](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12908/badge)](https://www.bestpractices.dev/projects/12908)
+
+> **Created and led by [Vaishnavi Gudur](https://www.linkedin.com/in/vaishnavi-gudur)**, with co-leader **Anshul Rajkumar** — OWASP Agent Memory Guard.
+> Official OWASP Foundation project addressing **ASI06 (Memory & Context Poisoning)**.
 
 > **⭐ If you find this project useful for securing your AI agents, please consider giving it a star on GitHub! It helps others discover the project.**
 
@@ -324,6 +327,32 @@ High-leverage contributions we'd love help with:
 
 If you discover a security vulnerability, please follow our [security policy](SECURITY.md) for responsible disclosure.
 
+## Authors & maintainers
+
+- **[Vaishnavi Gudur](https://www.linkedin.com/in/vaishnavi-gudur)** — Project Creator and Lead Maintainer
+- **Anshul Rajkumar** — Co-Leader
+
+See [AUTHORS](AUTHORS) for details.
+
+## Recognition
+
+- Referenced in the MITRE ATLAS "Memory Hardening" mitigation as an open-source implementation of memory-hardening controls.
+- Featured by Help Net Security, "OWASP Agent Memory Guard: Stop AI agents from being weaponized through their own memory" (June 2026).
+
+## How to cite
+
+Use GitHub's "Cite this repository" button (powered by [CITATION.cff](CITATION.cff)), or:
+
+```bibtex
+@software{agent_memory_guard,
+  author  = {Gudur, Vaishnavi and Rajkumar, Anshul},
+  title   = {OWASP Agent Memory Guard: A Runtime Defense and Open Benchmark
+             for Memory Poisoning in LLM Agents (ASI06)},
+  url     = {https://github.com/OWASP/www-project-agent-memory-guard},
+  license = {Apache-2.0}
+}
+```
+
 ## License
 
-Apache-2.0
+Apache-2.0 — copyright OWASP Foundation. See [LICENSE.md](LICENSE.md).
