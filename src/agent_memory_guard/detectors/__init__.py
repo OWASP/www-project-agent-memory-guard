@@ -2,7 +2,12 @@ from agent_memory_guard.detectors.anomaly import (
     RapidChangeDetector,
     SizeAnomalyDetector,
 )
-from agent_memory_guard.detectors.base import DetectionResult, Detector
+from agent_memory_guard.detectors.base import (
+    DetectionResult,
+    Detector,
+    detection_confidence,
+    scan_text,
+)
 from agent_memory_guard.detectors.cross_task import CrossTaskContaminationDetector
 from agent_memory_guard.detectors.excessive_autonomy import ExcessiveAutonomyDetector
 from agent_memory_guard.detectors.injection import PromptInjectionDetector
@@ -18,6 +23,8 @@ except ImportError:
     MLInjectionDetector = None  # type: ignore[assignment,misc]
 
 __all__ = [
+    "detection_confidence",
+    "scan_text",
     "Detector",
     "DetectionResult",
     "PromptInjectionDetector",

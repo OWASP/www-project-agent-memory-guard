@@ -24,7 +24,11 @@ import time
 from dataclasses import dataclass
 from typing import Literal
 
-from agent_memory_guard.detectors import DetectionResult
+from agent_memory_guard.detectors import (
+    DetectionResult,
+    detection_confidence,
+    scan_text,
+)
 from agent_memory_guard.scan import (
     ScanResult,
     ThreatType,
@@ -69,8 +73,8 @@ def scan_tool_output(
     max_confidence = 0.0
 
     for detector in detectors:
-        result: DetectionResult = detector.detect(output)
-        if result.detected and result.confidence >= threshold:
+        result: DetectionResult = scan_text(detector, output)
+        if result.matched and detection_confidence(result) >= threshold:
             from agent_memory_guard.detectors import (
                 PromptInjectionDetector,
                 SelfReinforcementDetector,
@@ -82,7 +86,7 @@ def scan_tool_output(
                 threats.append(ThreatType.SECRET_LEAKAGE)
             elif isinstance(detector, SelfReinforcementDetector):
                 threats.append(ThreatType.SELF_REINFORCEMENT)
-            max_confidence = max(max_confidence, result.confidence)
+            max_confidence = max(max_confidence, detection_confidence(result))
 
     elapsed_us = (time.perf_counter_ns() - start) // 1000
     blocked = len(threats) > 0
