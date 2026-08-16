@@ -24,6 +24,16 @@ semgrep --config ./semgrep/agent-memory-unguarded.yaml /path/to/your/agent/code
 semgrep --config r/owasp.agent-memory-guard /path/to/your/agent/code
 ```
 
+## Tests
+
+Each rule ships with annotated true-positive (`# ruleid:`) and true-negative
+(`# ok:`) cases in `agent-memory-unguarded.py`, following the
+[semgrep-rules](https://github.com/semgrep/semgrep-rules) testing convention:
+
+```bash
+semgrep --test semgrep/
+```
+
 ## What gets flagged
 
 ```python

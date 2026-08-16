@@ -11,8 +11,6 @@ rules:
           regex: ".*(memory|mem|store|history|context|scratchpad|state|cache).*"
       - pattern-not-inside: |
           guard.write(...)
-      - pattern-not-inside: |
-          from agent_memory_guard import ...
           ...
     message: >
       Unguarded write to agent memory store '$MEMORY'. Memory writes in AI agent
@@ -31,6 +29,13 @@ rules:
     severity: WARNING
     metadata:
       category: security
+      subcategory: [audit]
+      cwe:
+        - "CWE-501: Trust Boundary Violation"
+        - "CWE-1427: Improper Neutralization of Input Used for LLM Prompting"
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: HIGH
       technology: [ai, llm, agents]
       owasp: "ASI06: Memory Poisoning"
       references:
@@ -46,9 +51,6 @@ rules:
           regex: ".*(mem0|memory|mem_client).*"
       - pattern-not-inside: |
           guard.write(...)
-          ...
-      - pattern-not-inside: |
-          from agent_memory_guard import ...
           ...
     message: >
       Unguarded mem0 memory write. Content passed to mem0's add() method is
@@ -67,6 +69,13 @@ rules:
     severity: WARNING
     metadata:
       category: security
+      subcategory: [audit]
+      cwe:
+        - "CWE-501: Trust Boundary Violation"
+        - "CWE-1427: Improper Neutralization of Input Used for LLM Prompting"
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: HIGH
       technology: [ai, llm, agents, mem0]
       owasp: "ASI06: Memory Poisoning"
       references:
@@ -83,10 +92,7 @@ rules:
           metavariable: $HISTORY
           regex: ".*(history|chat_history|message_history|memory).*"
       - pattern-not-inside: |
-          from agent_memory_guard import ...
-          ...
-      - pattern-not-inside: |
-          from langchain_agent_memory_guard import ...
+          guard.write(...)
           ...
     message: >
       Unguarded LangChain chat history write. Messages added to persistent chat
@@ -110,6 +116,13 @@ rules:
     severity: WARNING
     metadata:
       category: security
+      subcategory: [audit]
+      cwe:
+        - "CWE-501: Trust Boundary Violation"
+        - "CWE-1427: Improper Neutralization of Input Used for LLM Prompting"
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: HIGH
       technology: [ai, llm, agents, langchain]
       owasp: "ASI06: Memory Poisoning"
       references:
@@ -121,14 +134,8 @@ rules:
       - metavariable-regex:
           metavariable: $HISTORY
           regex: ".*(chat_history|messages|conversation|history).*"
-      - metavariable-regex:
-          metavariable: $MSG
-          regex: ".*"
       - pattern-not-inside: |
           guard.write(...)
-          ...
-      - pattern-not-inside: |
-          from agent_memory_guard import ...
           ...
     message: >
       Unguarded append to agent conversation history. In multi-agent systems
@@ -151,6 +158,13 @@ rules:
     severity: WARNING
     metadata:
       category: security
+      subcategory: [audit]
+      cwe:
+        - "CWE-501: Trust Boundary Violation"
+        - "CWE-1427: Improper Neutralization of Input Used for LLM Prompting"
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: HIGH
       technology: [ai, llm, agents, autogen]
       owasp: "ASI06: Memory Poisoning"
       references:
