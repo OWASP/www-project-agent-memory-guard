@@ -69,7 +69,6 @@ jobs:
         run: |
           set -euo pipefail
           TOTAL=${{ steps.downloads.outputs.total }}
-          CLONES=${{ steps.downloads.outputs.clones }}
           # Round down to nearest 100 for display
           DISPLAY=$(python3 -c "print(f'{int($TOTAL / 100) * 100:,}+')")
           ROUNDED=$(python3 -c "print(int($TOTAL / 100) * 100)")
@@ -82,8 +81,6 @@ jobs:
           fi
           # Update the downloads line in README
           sed -i "s/### 📦 [0-9,]*+ total downloads/### 📦 $DISPLAY total downloads/" README.md
-          # Keep the static clones badge in sync with the live gist count
-          sed -i "s|/badge/clones-[0-9]*-blue|/badge/clones-$CLONES-blue|" README.md
 
       - name: Commit and push if changed
         run: |
