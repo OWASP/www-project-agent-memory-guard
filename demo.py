@@ -71,7 +71,7 @@ for key, content in poisoned_memories:
     except PolicyViolation as exc:
         blocked_count += 1
         display = content[:60] + "..." if len(content) > 60 else content
-        print(f"  🛡️  BLOCKED [{exc.detector}]: {display}")
+        print(f"  🛡️  BLOCKED [{exc.rule}]: {display}")
 print()
 
 # --- Summary ---
