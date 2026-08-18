@@ -1,0 +1,60 @@
+name: Clone Count Diagnostic (temporary, read-only)
+
+# Temporary diagnostic for the clone count being stuck at 8501.
+# Reads only — it never writes a gist, a secret, or the repo.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
+    steps:
+      - name: What the GitHub traffic API reports right now
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/traffic/clones" > traffic.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("traffic.json"))
+          print(f"TRAFFIC API: 14-day count={d['count']} uniques={d['uniques']} entries={len(d['clones'])}")
+          for e in d["clones"]:
+              print(f"   {e['timestamp']}  count={e['count']:<5} uniques={e['uniques']}")
+          PY
+
+      - name: What the gist the README badges point at contains
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" > readme_gist.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("readme_gist.json"))
+          print(f"README GIST: count={d['count']} uniques={d['uniques']} entries={len(d['clones'])}")
+          print("   newest stored entries:")
+          for e in d["clones"][-8:]:
+              print(f"   {e['timestamp']}  count={e['count']:<5} uniques={e['uniques']}")
+          PY
+
+      - name: Is the gist the workflow writes the same one the badges read?
+        run: |
+          set -euo pipefail
+          if curl -fsSL "https://gist.githubusercontent.com/vgudur-dev/${{ secrets.GIST_ID }}/raw/clone.json" > secret_gist.json; then
+            python3 - <<'PY'
+          import hashlib, json
+          a = open("readme_gist.json", "rb").read()
+          b = open("secret_gist.json", "rb").read()
+          d = json.loads(b)
+          print(f"GIST_ID GIST: count={d['count']} entries={len(d['clones'])}")
+          same = hashlib.sha256(a).hexdigest() == hashlib.sha256(b).hexdigest()
+          print(f"SAME GIST AS README BADGES: {same}")
+          if not same:
+              print("MISMATCH: the workflow is accumulating into a different gist than the README reads.")
+          PY
+          else
+            echo "GIST_ID gist could not be fetched (404 or bad id) — the workflow would recreate it and rotate the secret."
+          fi
