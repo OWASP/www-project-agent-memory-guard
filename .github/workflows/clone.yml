@@ -2,7 +2,13 @@ name: GitHub Clone Count Update Everyday
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    # Runs at 12:00 UTC, not midnight. GitHub's traffic API publishes a day's
+    # clone totals well after that day ends: a run just after midnight UTC sees
+    # nothing for the previous day (and sometimes the day before that either),
+    # so the stored count trailed reality by 2-3 days and looked frozen. Only
+    # the running total is delayed, never lost — the API keeps a 14-day window
+    # and each run re-reads it — but midday collection keeps the lag to a day.
+    - cron: "0 12 * * *"
   workflow_dispatch:
 
 jobs:

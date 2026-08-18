@@ -2,7 +2,9 @@ name: Update Download Stats Daily
 
 on:
   schedule:
-    - cron: "30 0 * * *"  # Run daily at 00:30 UTC
+    # 30 minutes after clone.yml, which runs at 12:00 UTC — see the note there
+    # about GitHub publishing each day's clone totals well after midnight UTC.
+    - cron: "30 12 * * *"
   workflow_dispatch:
 
 jobs:
@@ -17,46 +19,48 @@ jobs:
         id: downloads
         run: |
           set -euo pipefail
-          # Get total downloads from pepy.tech badges (all-time, accurate)
-          curl -fsSL "https://static.pepy.tech/badge/agent-memory-guard" -o /tmp/amg_badge.svg
-          curl -fsSL "https://static.pepy.tech/badge/langchain-agent-memory-guard" -o /tmp/lc_badge.svg
 
-          # Parse badge SVG values (e.g., "1.3k", "594", "2k")
-          AMG=$(python3 -c "
+          # pepy's default badge (static.pepy.tech/badge/<project>) renders an
+          # abbreviated value such as "6k", which pinned the PyPI figure at exactly
+          # 6000 for weeks regardless of the real count. The personalized badge with
+          # units=none renders the full integer, so the total tracks reality instead
+          # of jumping a thousand at a time.
+          cat > /tmp/parse_downloads.py <<'PY'
           import re
-          with open('/tmp/amg_badge.svg') as f:
-              svg = f.read()
-          # Find the download count in the SVG text
-          matches = re.findall(r'>([0-9,.]+[kKmM]?)</text>', svg)
-          val = matches[-1] if matches else '0'
-          val = val.replace(',','')
-          if 'k' in val.lower():
-              num = float(val.lower().replace('k','')) * 1000
-          elif 'm' in val.lower():
-              num = float(val.lower().replace('m','')) * 1000000
-          else:
-              num = float(val)
-          print(int(num))
-          ")
+          import sys
 
-          LANGCHAIN=$(python3 -c "
-          import re
-          with open('/tmp/lc_badge.svg') as f:
+          path, project = sys.argv[1], sys.argv[2]
+          with open(path) as f:
               svg = f.read()
-          matches = re.findall(r'>([0-9,.]+[kKmM]?)</text>', svg)
-          val = matches[-1] if matches else '0'
-          val = val.replace(',','')
-          if 'k' in val.lower():
-              num = float(val.lower().replace('k','')) * 1000
-          elif 'm' in val.lower():
-              num = float(val.lower().replace('m','')) * 1000000
-          else:
-              num = float(val)
-          print(int(num))
-          ")
 
-          # Get clone count from gist (maintained by clone.yml action)
-          CLONES=$(curl -fsS "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'])")
+          labels = [label.strip() for label in re.findall(r">([^<]+)</text>", svg)]
+          exact = [label for label in labels if re.fullmatch(r"[0-9][0-9,]*", label)]
+          if not exact:
+              sys.exit(
+                  f"{project}: pepy returned no plain integer download count "
+                  f"(labels seen: {labels}). An abbreviated value like '6k' would "
+                  f"silently under-report the total, so this is treated as a failure. "
+                  f"Check whether the personalized-badge units=none endpoint changed."
+              )
+          print(int(exact[-1].replace(",", "")))
+          PY
+
+          fetch_downloads() {
+            project="$1"
+            svg="/tmp/${project}-downloads.svg"
+            curl -fsSL --retry 3 --retry-delay 5 \
+              "https://static.pepy.tech/personalized-badge/${project}?period=total&units=none&left_text=downloads&left_color=grey&right_color=blue" \
+              -o "$svg"
+            python3 /tmp/parse_downloads.py "$svg" "$project"
+          }
+
+          AMG=$(fetch_downloads agent-memory-guard)
+          LANGCHAIN=$(fetch_downloads langchain-agent-memory-guard)
+
+          # Clone count from the gist maintained by clone.yml
+          CLONES=$(curl -fsSL --retry 3 --retry-delay 5 \
+            "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" \
+            | python3 -c "import json,sys; print(int(json.load(sys.stdin)['count']))")
 
           TOTAL=$((AMG + LANGCHAIN + CLONES))
           echo "amg=$AMG" >> $GITHUB_OUTPUT
@@ -69,17 +73,16 @@ jobs:
         run: |
           set -euo pipefail
           TOTAL=${{ steps.downloads.outputs.total }}
-          # Round down to nearest 100 for display
-          DISPLAY=$(python3 -c "print(f'{int($TOTAL / 100) * 100:,}+')")
-          ROUNDED=$(python3 -c "print(int($TOTAL / 100) * 100)")
-          # The all-time count can never decrease. A drop means a badge or the
-          # gist failed to parse, so refuse to publish a wrong number.
+          DISPLAY=$(python3 -c "print(f'{$TOTAL:,}+')")
+          # Every component is an all-time count, so the total can only grow. A drop
+          # means a source failed to parse — or that the README was hand-edited to a
+          # number above what the sources actually report. Either way, publishing it
+          # would be wrong, so stop and say so.
           CURRENT=$(grep -o '### 📦 [0-9][0-9,]*+ total downloads' README.md | grep -o '[0-9][0-9,]*' | head -1 | tr -d ',')
-          if [ -n "$CURRENT" ] && [ "$ROUNDED" -lt "$CURRENT" ]; then
-            echo "::error::Computed total ($TOTAL) is below the published count ($CURRENT). A download badge or the clone-count gist likely failed to parse — not updating README."
+          if [ -n "$CURRENT" ] && [ "$TOTAL" -lt "$CURRENT" ]; then
+            echo "::error::Computed total ($TOTAL) is below the published count ($CURRENT). Either a download source failed to parse, or README.md was hand-edited above the real total — not updating README."
             exit 1
           fi
-          # Update the downloads line in README
           sed -i "s/### 📦 [0-9,]*+ total downloads/### 📦 $DISPLAY total downloads/" README.md
 
       - name: Commit and push if changed
