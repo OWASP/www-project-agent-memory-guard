@@ -2,7 +2,9 @@ name: Update Download Stats Daily
 
 on:
   schedule:
-    - cron: "30 0 * * *"  # Run daily at 00:30 UTC
+    # 30 minutes after clone.yml, which runs at 12:00 UTC — see the note there
+    # about GitHub publishing each day's clone totals well after midnight UTC.
+    - cron: "30 12 * * *"
   workflow_dispatch:
 
 jobs:
@@ -12,32 +14,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-
-      - name: TEMP diagnostic — traffic API vs stored gist history
-        env:
-          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
-        run: |
-          set -euo pipefail
-          curl -fsS -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/traffic/clones" > /tmp/traffic.json
-          curl -fsSL "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" > /tmp/gist.json
-          python3 - <<'PY'
-          import json
-          t = json.load(open("/tmp/traffic.json"))
-          g = json.load(open("/tmp/gist.json"))
-          print(f"TRAFFIC API (last 14d): count={t['count']} uniques={t['uniques']} entries={len(t['clones'])}")
-          for e in t["clones"]:
-              print(f"    {e['timestamp']}  count={e['count']:<5} uniques={e['uniques']}")
-          print(f"GIST: count={g['count']} uniques={g['uniques']} entries={len(g['clones'])}")
-          print("    newest stored entries:")
-          for e in g["clones"][-6:]:
-              print(f"    {e['timestamp']}  count={e['count']:<5} uniques={e['uniques']}")
-          stored = {e["timestamp"] for e in g["clones"]}
-          missing = [e for e in t["clones"] if e["timestamp"] not in stored]
-          print(f"TRAFFIC ENTRIES NOT YET IN GIST: {len(missing)}")
-          for e in missing:
-              print(f"    MISSING {e['timestamp']}  count={e['count']}")
-          PY
 
       - name: Fetch download counts
         id: downloads
