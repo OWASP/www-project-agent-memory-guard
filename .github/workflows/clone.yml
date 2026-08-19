@@ -78,6 +78,40 @@ jobs:
               cp clone.json clone_before.json
           fi
 
+      - name: TEMP diagnostic — traffic API vs stored gist
+        run: |
+          python3 - <<'PY'
+          import json
+
+          now = json.load(open('clone.json'))
+          before = json.load(open('clone_before.json'))
+
+          print(f"TRAFFIC API: count={now.get('count')} uniques={now.get('uniques')} "
+                f"entries={len(now.get('clones', []))}")
+          for e in now.get('clones', []):
+              print(f"    {e['timestamp']}  count={e['count']:<6} uniques={e['uniques']}")
+
+          print(f"GIST STORED: count={before.get('count')} uniques={before.get('uniques')} "
+                f"entries={len(before.get('clones', []))}")
+          for e in before.get('clones', [])[-6:]:
+              print(f"    {e['timestamp']}  count={e['count']:<6} uniques={e['uniques']}")
+
+          stored = {e['timestamp'] for e in before.get('clones', [])}
+          missing = [e for e in now.get('clones', []) if e['timestamp'] not in stored]
+          print(f"TRAFFIC ENTRIES NOT YET IN GIST: {len(missing)}")
+          for e in missing:
+              print(f"    MISSING {e['timestamp']}  count={e['count']}")
+
+          # Entries present in both where the API now reports a different count
+          bymark = {e['timestamp']: e['count'] for e in before.get('clones', [])}
+          changed = [(e['timestamp'], bymark[e['timestamp']], e['count'])
+                     for e in now.get('clones', [])
+                     if e['timestamp'] in bymark and bymark[e['timestamp']] != e['count']]
+          print(f"REVISED COUNTS FOR EXISTING DAYS: {len(changed)}")
+          for ts, old, new in changed:
+              print(f"    {ts}  {old} -> {new}")
+          PY
+
       - name: update clone.json
         run: |
           curl -fsS https://raw.githubusercontent.com/MShawon/github-clone-count-badge/master/main.py > main.py
