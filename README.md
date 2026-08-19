@@ -10,7 +10,10 @@
 
 <div align="center">
 
-### 📦 16,491+ total downloads
+<!-- Maintained automatically by .github/workflows/update-downloads.yml (PyPI totals + GitHub clones).
+     Please don't edit this number by hand: the workflow refuses to publish a total lower than the
+     one already here, so a hand-entered figure above the real one silently stops all future updates. -->
+### 📦 16,312+ total downloads
 
 [![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) ![Clones](https://img.shields.io/badge/clones-253-blue) [![Unique Cloners](https://img.shields.io/badge/dynamic/json?color=success&label=Unique%20Cloners&query=uniques&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
