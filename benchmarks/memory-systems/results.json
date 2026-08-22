@@ -1,0 +1,166 @@
+{
+  "benchmark": "Agent Memory Security Benchmark (AMSB)",
+  "benchmark_version": "0.1.0",
+  "generated_at": "2026-08-22",
+  "disclosure": "Agent Memory Guard authors this benchmark and submits itself for grading. Rows marked _self-submission_ are the author's own system, measured through the identical adapter contract and corpus as every other entry. Scores are reproducible with `amg-bench`.",
+  "corpus": {
+    "total": 21,
+    "malicious": 15,
+    "benign": 6,
+    "category:prompt_injection": 4,
+    "category:sensitive_data": 3,
+    "category:protected_key": 3,
+    "category:memory_persistence": 4,
+    "category:size_anomaly": 1,
+    "category:benign": 6
+  },
+  "leaderboard": [
+    {
+      "system": "agent-memory-guard (hardened)",
+      "version": "0.3.0-dev",
+      "self_submission": true,
+      "score": 93.9,
+      "grade": "A",
+      "uncapped_grade": "A",
+      "ceiling": null,
+      "defense_rate": 0.9388,
+      "false_positive_rate": 0.0,
+      "malicious_total": 15,
+      "defended_total": 14,
+      "critical_breaches": 0,
+      "false_positives": 0,
+      "benign_total": 6,
+      "median_latency_us": 77.6,
+      "categories": [
+        {
+          "category": "memory_persistence",
+          "defended": 3,
+          "total": 4,
+          "rate": 0.75
+        },
+        {
+          "category": "prompt_injection",
+          "defended": 4,
+          "total": 4,
+          "rate": 1.0
+        },
+        {
+          "category": "protected_key",
+          "defended": 3,
+          "total": 3,
+          "rate": 1.0
+        },
+        {
+          "category": "sensitive_data",
+          "defended": 3,
+          "total": 3,
+          "rate": 1.0
+        },
+        {
+          "category": "size_anomaly",
+          "defended": 1,
+          "total": 1,
+          "rate": 1.0
+        }
+      ]
+    },
+    {
+      "system": "agent-memory-guard (strict)",
+      "version": "0.3.0-dev",
+      "self_submission": true,
+      "score": 53.1,
+      "grade": "F",
+      "uncapped_grade": "F",
+      "ceiling": "D",
+      "defense_rate": 0.5306,
+      "false_positive_rate": 0.0,
+      "malicious_total": 15,
+      "defended_total": 8,
+      "critical_breaches": 2,
+      "false_positives": 0,
+      "benign_total": 6,
+      "median_latency_us": 64.1,
+      "categories": [
+        {
+          "category": "memory_persistence",
+          "defended": 0,
+          "total": 4,
+          "rate": 0.0
+        },
+        {
+          "category": "prompt_injection",
+          "defended": 4,
+          "total": 4,
+          "rate": 1.0
+        },
+        {
+          "category": "protected_key",
+          "defended": 0,
+          "total": 3,
+          "rate": 0.0
+        },
+        {
+          "category": "sensitive_data",
+          "defended": 3,
+          "total": 3,
+          "rate": 1.0
+        },
+        {
+          "category": "size_anomaly",
+          "defended": 1,
+          "total": 1,
+          "rate": 1.0
+        }
+      ]
+    },
+    {
+      "system": "unguarded-dict",
+      "version": "n/a",
+      "self_submission": false,
+      "score": 0.0,
+      "grade": "F",
+      "uncapped_grade": "F",
+      "ceiling": "D",
+      "defense_rate": 0.0,
+      "false_positive_rate": 0.0,
+      "malicious_total": 15,
+      "defended_total": 0,
+      "critical_breaches": 5,
+      "false_positives": 0,
+      "benign_total": 6,
+      "median_latency_us": 0.7,
+      "categories": [
+        {
+          "category": "memory_persistence",
+          "defended": 0,
+          "total": 4,
+          "rate": 0.0
+        },
+        {
+          "category": "prompt_injection",
+          "defended": 0,
+          "total": 4,
+          "rate": 0.0
+        },
+        {
+          "category": "protected_key",
+          "defended": 0,
+          "total": 3,
+          "rate": 0.0
+        },
+        {
+          "category": "sensitive_data",
+          "defended": 0,
+          "total": 3,
+          "rate": 0.0
+        },
+        {
+          "category": "size_anomaly",
+          "defended": 0,
+          "total": 1,
+          "rate": 0.0
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 ## [Unreleased] - 2026-05-14
 
 ### Added
+- **Agent Memory Security Benchmark (AMSB)** — a framework-neutral benchmark and leaderboard that grades any agent memory system for resilience to the memory-poisoning lifecycle (plant → survive context reset → recall). Ships the `agent_memory_guard.bench` package (adapter contract, scenario corpus, harness, SSL-Labs-style scoring with grade ceilings, report renderer), an `amg-bench` CLI, offline baselines (unguarded dict + two AMG configurations), and opt-in reference adapters for mem0/Letta/Zep. AMG is graded arm's-length as one system among others. Committed results under `benchmarks/memory-systems/`.
 - Expanded community adoption: GitHub issues opened on microsoft/semantic-kernel, run-llama/llama_index, langchain-ai/langgraph, and BerriAI/litellm requesting native ASI06 integration
 - - Documentation updates for v0.3.0 roadmap (LlamaIndex/CrewAI adapters, Redis/PostgreSQL backends)
  
