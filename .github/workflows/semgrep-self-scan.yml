@@ -1,0 +1,61 @@
+name: Semgrep (self-scan)
+
+# NEW FILE. The project ships Semgrep rules for finding unguarded agent memory
+# operations (semgrep/agent-memory-unguarded.yaml) but never runs them against
+# its own examples, templates, and integrations. Two reasons to fix that:
+#
+#   1. It is the cheapest possible regression test for the rules themselves.
+#      The v0.3.1 release exists because the rules were producing zero findings;
+#      a workflow that asserts a known-vulnerable fixture still trips would have
+#      caught that the day it broke.
+#   2. "We run our own rules on our own code" is a line worth being able to say
+#      when a platform security team evaluates the project.
+#
+# The fixture assertion below is the important half. A scan that reports zero
+# findings looks identical to a scan whose ruleset silently failed to load —
+# which is exactly how the zero-findings bug survived.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Run project rules against project code
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # required by upload-sarif
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assert the ruleset actually fires on the known-vulnerable fixture
+        run: |
+          set -euo pipefail
+          findings=$(semgrep --config semgrep/agent-memory-unguarded.yaml \
+            --json --quiet semgrep/agent-memory-unguarded.py \
+            | python3 -c "import json,sys; print(len(json.load(sys.stdin)['results']))")
+          echo "Fixture findings: $findings"
+          if [ "$findings" -eq 0 ]; then
+            echo "::error::The Semgrep ruleset produced zero findings against its own known-vulnerable fixture. The rules are not loading or no longer match. This is the v0.3.1 regression — do not ship."
+            exit 1
+          fi
+
+      - name: Scan examples, templates and integrations
+        run: |
+          semgrep --config semgrep/agent-memory-unguarded.yaml \
+            --sarif --output semgrep.sarif \
+            examples/ templates/ integrations/ || true
+
+      - name: Upload findings to the Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+        if: always()

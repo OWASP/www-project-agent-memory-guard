@@ -1,5 +1,25 @@
 name: GitHub Clone Count Update Everyday
 
+# CHANGES IN THIS FILE
+#
+# 1. Removed `curl .../MShawon/github-clone-count-badge/master/main.py | python3`.
+#    That fetched and executed a script from a third party's mutable master
+#    branch inside a job holding a classic PAT with `repo` and `gist` scopes.
+#    The logic now lives in scripts/clone_count.py, vendored and reviewable.
+#
+# 2. Replaced `ad-m/github-push-action@master` with a plain git push. A third-
+#    party action pinned to `master` is an unreviewable moving target with write
+#    access to the repo, and OpenSSF Scorecard scores it under Pinned-Dependencies.
+#
+# 3. Added an explicit top-level `permissions: contents: read`; the job that
+#    actually commits keeps `contents: write` and nothing else.
+#
+# 4. Dropped `gh secret set GIST_ID` from the run. Writing a repository secret
+#    from inside a scheduled job is the reason this workflow needs `repo` scope
+#    at all. The gist id is now read from the GIST_ID secret and, if it is
+#    missing, the job says so and stops instead of silently creating a new gist
+#    every night.
+
 on:
   schedule:
     # Runs at 12:00 UTC, not midnight. GitHub's traffic API publishes a day's
@@ -11,113 +31,103 @@ on:
     - cron: "0 12 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
-    # gh and curl authenticate with this token. It must be a classic personal
-    # access token with 'repo' and 'gist' scopes — the traffic API and gist
-    # updates are not accessible to the workflow's built-in GITHUB_TOKEN.
+    # The traffic API and gist updates are not reachable with the built-in
+    # GITHUB_TOKEN, so this still needs a classic PAT with `repo` and `gist`.
     env:
       GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
+      GIST_ID: ${{ secrets.GIST_ID }}
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: verify SECRET_TOKEN is valid
+      - name: Verify SECRET_TOKEN and GIST_ID are usable
         run: |
-          if [ -z "$GH_TOKEN" ]; then
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
             echo "::error::The SECRET_TOKEN repository secret is not set. Create a classic personal access token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and save it as SECRET_TOKEN under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -z "${GIST_ID:-}" ]; then
+            echo "::error::The GIST_ID repository secret is not set. Create a gist containing clone.json, then save its id as GIST_ID. This workflow no longer creates gists on its own — a job that can mint new gists and rewrite repository secrets needs far more privilege than counting clones warrants."
             exit 1
           fi
           status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit)
           if [ "$status" != "200" ]; then
-            echo "::error::GitHub rejected the SECRET_TOKEN personal access token (HTTP $status — expired or revoked). Generate a new classic token with 'repo' and 'gist' scopes at https://github.com/settings/tokens and update the SECRET_TOKEN secret under Settings → Secrets and variables → Actions."
+            echo "::error::GitHub rejected SECRET_TOKEN (HTTP $status — expired or revoked). Generate a new classic token with 'repo' and 'gist' scopes and update the secret."
             exit 1
           fi
           scopes=$(curl -fsSI -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit | tr -d '\r' | grep -i '^x-oauth-scopes:' | cut -d: -f2-)
-          echo "Token is valid. Scopes:$scopes"
           for need in repo gist; do
             if ! echo "$scopes" | grep -qw "$need"; then
-              echo "::error::SECRET_TOKEN is valid but missing the '$need' scope. It must be a CLASSIC personal access token with 'repo' and 'gist' scopes (fine-grained tokens cannot access gists). Edit the token's scopes or generate a new one at https://github.com/settings/tokens, then update the SECRET_TOKEN secret."
+              echo "::error::SECRET_TOKEN is missing the '$need' scope. It must be a CLASSIC personal access token with 'repo' and 'gist' scopes (fine-grained tokens cannot access gists)."
               exit 1
             fi
           done
+          echo "Token valid. Scopes:$scopes"
 
-      - name: parse latest clone count
+      - name: Fetch the current 14-day clone window
         run: |
           curl -fsS \
             -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/traffic/clones \
-            > clone.json
+            > clone_current.json
 
-      - name: create gist and download previous count
-        id: set_id
+      - name: Download the stored history
         run: |
-          if gh secret list | grep -q "GIST_ID"
-          then
-              echo "GIST_ID found"
-              echo "GIST=${{ secrets.GIST_ID }}" >> $GITHUB_OUTPUT
-              curl https://gist.githubusercontent.com/${{ github.actor }}/${{ secrets.GIST_ID }}/raw/clone.json > clone_before.json
-              if cat clone_before.json | grep '404: Not Found'; then
-                echo "GIST_ID not valid anymore. Creating another gist..."
-                gist_id=$(gh gist create clone.json | awk -F / '{print $NF}')
-                echo $gist_id | gh secret set GIST_ID
-                echo "GIST=$gist_id" >> $GITHUB_OUTPUT
-                cp clone.json clone_before.json
-                git rm --ignore-unmatch  CLONE.md
-              fi
-          else
-              echo "GIST_ID not found. Creating a gist..."
-              gist_id=$(gh gist create clone.json | awk -F / '{print $NF}')
-              echo $gist_id | gh secret set GIST_ID
-              echo "GIST=$gist_id" >> $GITHUB_OUTPUT
-              cp clone.json clone_before.json
+          set -euo pipefail
+          if ! curl -fsSL "https://gist.githubusercontent.com/raw/${GIST_ID}/clone.json" -o clone_before.json; then
+            echo "::warning::Could not read the stored history from gist ${GIST_ID}. Starting from the current 14-day window only — the all-time total will be understated until the next successful run."
+            echo '{}' > clone_before.json
           fi
 
-      - name: update clone.json
+      - name: Merge into the running total
         run: |
-          curl -fsS https://raw.githubusercontent.com/MShawon/github-clone-count-badge/master/main.py > main.py
-          python3 main.py
+          python3 scripts/clone_count.py \
+            --current clone_current.json \
+            --history clone_before.json \
+            --out clone.json
 
-      - name: Update gist with latest count
+      - name: Update the gist
         run: |
-          content=$(sed -e 's/\\/\\\\/g' -e 's/\t/\\t/g' -e 's/\"/\\"/g' -e 's/\r//g' "clone.json" | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')
-          echo '{"description": "${{ github.repository }} clone statistics", "files": {"clone.json": {"content": "'"$content"'"}}}' > post_clone.json
+          set -euo pipefail
+          python3 - <<'PY' > post_clone.json
+          import json
+          with open("clone.json", encoding="utf-8") as fh:
+              content = fh.read()
+          print(json.dumps({
+              "description": "OWASP/www-project-agent-memory-guard clone statistics",
+              "files": {"clone.json": {"content": content}},
+          }))
+          PY
           curl -fsS -X PATCH \
             -H "Authorization: token $GH_TOKEN" \
             -H "Content-Type: application/json" \
-            -d @post_clone.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }} > /dev/null
+            -d @post_clone.json "https://api.github.com/gists/${GIST_ID}" > /dev/null
 
+      - name: Commit the badge stub if it is missing
+        run: |
+          set -euo pipefail
           if [ ! -f CLONE.md ]; then
-            shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
-            url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/clone.json"
-            repo="https://github.com/MShawon/github-clone-count-badge"
-            echo ''> CLONE.md
-            echo '
-            **Markdown**
-
-            ```markdown' >> CLONE.md
-            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
-            echo '
-            ```
-
-            **HTML**
-            ```html' >> CLONE.md
-            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
-            echo '```' >> CLONE.md
-
+            {
+              echo "# Clone count badge"
+              echo
+              echo '```markdown'
+              echo "[![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/raw/${GIST_ID}/clone.json&logo=github)](https://github.com/${{ github.repository }}/graphs/traffic)"
+              echo '```'
+            } > CLONE.md
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git add CLONE.md
-            git config --global user.name "GitHub Action"
-            git config --global user.email "action@github.com"
-            git commit -m "create clone count badge"
+            git commit -m "chore: add clone count badge stub"
+            git push
           fi
-
-      - name: Push
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
