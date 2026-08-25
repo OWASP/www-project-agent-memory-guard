@@ -193,7 +193,7 @@ class MemorySecurityScanner:
         """Collect files matching include/exclude patterns."""
         files = []
         for pattern in self.include_patterns:
-            clean = pattern.lstrip("**/") if pattern.startswith("**/") else pattern
+            clean = pattern.removeprefix("**/")
             for f in root.rglob(clean):
                 if f.is_file() and not self._is_excluded(f, root):
                     files.append(f)
