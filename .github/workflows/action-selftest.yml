@@ -1,0 +1,92 @@
+name: Action self-test
+
+# NEW FILE. The root action.yml has been broken — it crashed with
+# ModuleNotFoundError before scanning anything — and nothing in CI noticed,
+# because nothing in CI ever used the action.
+#
+# This runs the action against the repository's own known-vulnerable fixture on
+# every change to the action definition, and asserts it both runs and finds
+# something. A scan that reports zero findings is indistinguishable from a scan
+# that failed to start, so "it exited 0" is not the assertion that matters.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'action.yml'
+      - 'src/agent_memory_guard/cli.py'
+      - 'src/agent_memory_guard/scan.py'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - 'src/agent_memory_guard/cli.py'
+      - 'src/agent_memory_guard/scan.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: Action runs and finds the planted vulnerability
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create a deliberately unsafe fixture
+        run: |
+          mkdir -p .selftest
+          cat > .selftest/vulnerable_agent.py <<'PY'
+          """Fixture: an agent that writes unvalidated tool output straight to memory."""
+          import pickle
+
+          OPENAI_API_KEY = "sk-proj-notarealkeyjustafixture000000000000000"
+
+          class Agent:
+              def __init__(self, store):
+                  self.store = store
+
+              def remember(self, tool_output):
+                  # Unguarded write of untrusted content into persistent memory.
+                  self.store["agent.notes"] = tool_output
+
+              def load(self, blob):
+                  # Unsafe deserialization of memory contents.
+                  return pickle.loads(blob)
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # Install the WORKING TREE, not the PyPI release. The action installs
+      # agent-memory-guard from PyPI by default, and the newest release may lag
+      # behind main - as it does right now, where PyPI's 0.3.0 still contains
+      # the zero-findings bug fixed in PR #93. A self-test that installed from
+      # PyPI would be testing the last release rather than this PR, which is the
+      # same mistake memory-guard-scan.yml made.
+      - name: Install the working tree
+        run: pip install -e .
+
+      - name: Run the action against the fixture
+        id: scan
+        uses: ./
+        with:
+          scan-path: .selftest
+          output-format: json
+          min-severity: low
+          fail-on-findings: 'false'
+          upload-sarif: 'false'
+          skip-install: 'true'
+
+      - name: Assert the scan actually detected something
+        run: |
+          set -euo pipefail
+          COUNT="${{ steps.scan.outputs.findings-count }}"
+          echo "findings-count=$COUNT"
+          if [ -z "$COUNT" ] || [ "$COUNT" = "unknown" ] || [ "$COUNT" = "0" ]; then
+            echo "::error::The action reported $COUNT findings against a fixture containing a hardcoded API key, an unguarded memory write, and a pickle.loads of stored content. Either the action is not running or the scanner has regressed. This is exactly the failure mode that shipped before — do not merge."
+            exit 1
+          fi
+          echo "Action is working: $COUNT finding(s) on the fixture."
