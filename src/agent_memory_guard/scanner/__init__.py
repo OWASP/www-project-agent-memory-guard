@@ -18,6 +18,8 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from fnmatch import fnmatch
+
+from agent_memory_guard import __version__
 from pathlib import Path
 from typing import Any
 
@@ -423,7 +425,7 @@ def format_json(result: ScanResult) -> str:
     """Format results as JSON."""
     data: dict[str, Any] = {
         "tool": "owasp-agent-memory-guard",
-        "version": "0.3.0",
+        "version": __version__,
         "summary": {
             "files_scanned": result.files_scanned,
             "files_with_findings": result.files_with_findings,
@@ -500,7 +502,7 @@ def format_sarif(result: ScanResult) -> str:
                 "tool": {
                     "driver": {
                         "name": "OWASP Agent Memory Guard",
-                        "version": "0.3.0",
+                        "version": __version__,
                         "informationUri": "https://owasp.org/www-project-agent-memory-guard/",
                         "rules": list(rules.values()),
                     }
