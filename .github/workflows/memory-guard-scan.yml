@@ -1,5 +1,11 @@
 name: Agent Memory Guard Scan
 
+# CHANGED: added an explicit top-level permissions block. Without one, this
+# workflow inherits the repository default, which OpenSSF Scorecard scores as
+# excessive token permissions. Nothing here writes to the repo.
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths:
@@ -23,13 +29,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install agent-memory-guard
-        run: pip install agent-memory-guard
+      # CHANGED: install the version under test, not the last release from PyPI.
+      # As written, this workflow ran the published package against the PR — so a
+      # PR that broke the guard would still pass. It only ever proved that PyPI
+      # was reachable.
+      - name: Install agent-memory-guard from the working tree
+        run: pip install -e .
 
-      - name: Verify AMG import and version
+      - name: Scan this repository with its own scanner
         run: |
-          python -c "
-          import agent_memory_guard
-          print(f'agent-memory-guard v{agent_memory_guard.__version__} loaded')
-          print('All detection layers operational')
-          "
+          python -m scanner.scan \
+            --path src \
+            --policy strict \
+            --fail-on high \
+            --output text
