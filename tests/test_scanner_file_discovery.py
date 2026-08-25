@@ -22,7 +22,6 @@ import pytest
 
 from agent_memory_guard.scanner import MemorySecurityScanner
 
-
 VULNERABLE_SOURCE = '''\
 import pickle
 
