@@ -38,7 +38,7 @@ jobs:
 
       - name: Scan this repository with its own scanner
         run: |
-          python scanner/scan.py \
+          python -m scanner.scan \
             --path src \
             --policy strict \
             --fail-on high \
