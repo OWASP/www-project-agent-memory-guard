@@ -18,10 +18,10 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from fnmatch import fnmatch
-
-from agent_memory_guard import __version__
 from pathlib import Path
 from typing import Any
+
+from agent_memory_guard import __version__
 
 # ============================================================================
 # SEVERITY & FINDING MODELS
