@@ -21,6 +21,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+from agent_memory_guard import __version__
+
 # ============================================================================
 # SEVERITY & FINDING MODELS
 # ============================================================================
@@ -193,7 +195,7 @@ class MemorySecurityScanner:
         """Collect files matching include/exclude patterns."""
         files = []
         for pattern in self.include_patterns:
-            clean = pattern.lstrip("**/") if pattern.startswith("**/") else pattern
+            clean = pattern.removeprefix("**/")
             for f in root.rglob(clean):
                 if f.is_file() and not self._is_excluded(f, root):
                     files.append(f)
@@ -423,7 +425,7 @@ def format_json(result: ScanResult) -> str:
     """Format results as JSON."""
     data: dict[str, Any] = {
         "tool": "owasp-agent-memory-guard",
-        "version": "0.3.0",
+        "version": __version__,
         "summary": {
             "files_scanned": result.files_scanned,
             "files_with_findings": result.files_with_findings,
@@ -500,7 +502,7 @@ def format_sarif(result: ScanResult) -> str:
                 "tool": {
                     "driver": {
                         "name": "OWASP Agent Memory Guard",
-                        "version": "0.3.0",
+                        "version": __version__,
                         "informationUri": "https://owasp.org/www-project-agent-memory-guard/",
                         "rules": list(rules.values()),
                     }

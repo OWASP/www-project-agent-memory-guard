@@ -77,7 +77,13 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Launch a FastAPI-based REST API for runtime memory scanning.",
     )
     serve_parser.add_argument(
-        "--host", default="0.0.0.0", help="Host to bind (default: 0.0.0.0)"
+        "--host",
+        default="127.0.0.1",
+        help=(
+            "Host to bind (default: 127.0.0.1). The server has no authentication, "
+            "so binding a non-loopback address exposes the memory store to anyone "
+            "who can reach the port."
+        ),
     )
     serve_parser.add_argument(
         "--port", "-p", type=int, default=8000, help="Port to listen on (default: 8000)"
@@ -165,6 +171,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
         )
         return 1
 
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            f"WARNING: binding {args.host} exposes this server beyond localhost, and it "
+            "ships no authentication. Anyone who can reach this port can read and write "
+            "the guarded memory store. Put it behind an authenticating proxy or keep it "
+            "on 127.0.0.1."
+        )
     print(f"Starting Agent Memory Guard API server on {args.host}:{args.port}")
     print(f"Policy: {args.policy}")
     print(f"Docs: http://{args.host}:{args.port}/docs")

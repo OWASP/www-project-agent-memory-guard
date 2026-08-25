@@ -1,44 +1,231 @@
 name: 'OWASP Agent Memory Guard'
-description: 'Scan Python AI-agent projects for memory-poisoning patterns and upload SARIF findings'
-author: 'OWASP Agent Memory Guard'
+description: 'Scan AI agent code for memory poisoning vulnerabilities (OWASP ASI06) — prompt injection, secret leakage, unguarded memory writes, unsafe deserialization. Uploads SARIF to the Security tab.'
+author: 'OWASP Agent Memory Guard Project'
 
+# WHY THIS FILE IS BEING REPLACED
+#
+# The repository currently ships two different, incompatible actions:
+#
+#   action.yml         (root)  — what GitHub Marketplace publishes
+#   action/action.yml  (subdir) — a second, richer definition
+#
+# Only the root file is what someone gets from `uses: OWASP/www-project-agent-memory-guard@vX`.
+# And the root file does not work. It runs:
+#
+#     python ${{ github.action_path }}/scanner/scan.py
+#
+# which puts <action_path>/scanner on sys.path but not <action_path>, so
+# scan.py's `from scanner.rules import SCAN_RULES` raises ModuleNotFoundError
+# before any scanning happens. Verified by running it directly:
+#
+#     ModuleNotFoundError: No module named 'scanner'
+#
+# It also installed only pyyaml, never the package itself. So the project's
+# GitHub Action — the CI distribution channel, and the one that produces a
+# download on every workflow run of every adopting repo — has been failing on
+# first use for anyone who tried it.
+#
+# This file replaces the root definition with the working implementation from
+# action/action.yml, which shells out to the real `amg scan` CLI installed from
+# PyPI. Delete action/action.yml and action/scan.py after applying, and keep
+# action/README.md as the action's documentation.
+#
+# SEQUENCING - READ THIS BEFORE PUBLISHING THE ACTION
+#
+# This action installs agent-memory-guard FROM PyPI. As of 25 Aug 2026 the
+# newest release on PyPI is 0.3.0, which contains the _collect_files bug fixed
+# in PR #93 - the one where the scanner matches no files and reports zero
+# findings.
+#
+# So a correctly-written action that installs 0.3.0 will run green, report
+# "No memory security findings", and be wrong every time. That is the same
+# silent false-negative, reintroduced at the distribution layer.
+#
+# 0.3.1 must be on PyPI before this action is published or advertised.
+# Until then, pin `version:` to a prerelease or use `skip-install:` with a
+# working-tree install, as the self-test workflow does.
 
 branding:
   icon: 'shield'
-  color: 'red'
-
+  color: 'blue'
 
 inputs:
-  policy:
-    description: 'Policy level (strict, moderate, basic)'
-    required: false
-    default: 'moderate'
-  fail-on:
-    description: 'Fail threshold (high, medium, low)'
-    required: false
-    default: 'high'
-  path:
-    description: 'Path to scan'
+  scan-path:
+    description: 'Path to scan for agent memory operations'
     required: false
     default: '.'
+  fail-on-findings:
+    description: 'Fail the workflow if vulnerabilities are found'
+    required: false
+    default: 'true'
+  include-patterns:
+    description: 'Comma-separated glob patterns for files to include'
+    required: false
+    default: '**/*.py'
+  exclude-patterns:
+    description: 'Comma-separated glob patterns for files to exclude'
+    required: false
+    default: '**/test*/**,**/node_modules/**,**/.venv/**'
+  min-severity:
+    description: 'Minimum severity to report: low, medium, high, critical'
+    required: false
+    default: 'medium'
+  output-format:
+    description: 'Output format: text, json, sarif'
+    required: false
+    default: 'sarif'
+  upload-sarif:
+    description: 'Upload SARIF results to the GitHub Security tab'
+    required: false
+    default: 'true'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  version:
+    description: 'Version of agent-memory-guard to install (default: latest release)'
+    required: false
+    default: ''
+  skip-install:
+    description: >-
+      Skip installing agent-memory-guard from PyPI and use whatever is already on
+      PATH. Set this when the caller has installed the package itself - a pinned
+      environment, an internal mirror, or CI testing a working tree with
+      `pip install -e .`. The action still verifies the `amg` CLI is present.
+    required: false
+    default: 'false'
 
+outputs:
+  findings-count:
+    description: 'Total number of findings detected'
+    value: ${{ steps.scan.outputs.findings-count }}
+  critical-count:
+    description: 'Number of critical severity findings'
+    value: ${{ steps.scan.outputs.critical-count }}
+  high-count:
+    description: 'Number of high severity findings'
+    value: ${{ steps.scan.outputs.high-count }}
+  report-path:
+    description: 'Path to the generated report file'
+    value: ${{ steps.scan.outputs.report-path }}
+  sarif-path:
+    description: 'Path to SARIF output'
+    value: ${{ steps.scan.outputs.sarif-path }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Run Agent Memory Guard Scanner
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Agent Memory Guard
       shell: bash
       run: |
-        pip install -q pyyaml
-        python ${{ github.action_path }}/scanner/scan.py \
-          --path "${{ inputs.path }}" \
-          --policy "${{ inputs.policy }}" \
-          --fail-on "${{ inputs.fail-on }}" \
-          --output sarif \
-          --output-file results.sarif
+        set -euo pipefail
+        if [ "${{ inputs.skip-install }}" = "true" ]; then
+          echo "skip-install set - using the agent-memory-guard already on PATH."
+        elif [ -n "${{ inputs.version }}" ]; then
+          pip install --quiet "agent-memory-guard==${{ inputs.version }}"
+        else
+          pip install --quiet agent-memory-guard
+        fi
+        # Fail loudly here rather than three steps later with a confusing error.
+        if ! command -v amg >/dev/null 2>&1; then
+          echo "::error::The 'amg' CLI was not found after installing agent-memory-guard. The package may have been published without its console_scripts entry point."
+          exit 1
+        fi
+        echo "Installed: $(amg --version 2>/dev/null || pip show agent-memory-guard | grep -i '^version')"
 
+    - name: Run memory security scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
 
-    - name: Upload SARIF results
+        case "${{ inputs.output-format }}" in
+          sarif) REPORT_FILE="amg-results.sarif" ;;
+          json)  REPORT_FILE="amg-results.json" ;;
+          *)     REPORT_FILE="amg-results.txt" ;;
+        esac
+
+        amg scan "${{ inputs.scan-path }}" \
+          --severity "${{ inputs.min-severity }}" \
+          --format "${{ inputs.output-format }}" \
+          --include "${{ inputs.include-patterns }}" \
+          --exclude "${{ inputs.exclude-patterns }}" \
+          --output "$REPORT_FILE" \
+          ${{ inputs.fail-on-findings == 'true' && '--fail-on-findings' || '' }}
+
+        SCAN_EXIT=$?
+
+        if [ ! -f "$REPORT_FILE" ]; then
+          echo "::error::The scan produced no report file. This usually means the scan itself failed rather than finding nothing — check the step log above."
+          exit 1
+        fi
+
+        if [ "${{ inputs.output-format }}" = "sarif" ] || [ "${{ inputs.output-format }}" = "json" ]; then
+          FINDINGS=$(python3 - "$REPORT_FILE" <<'PY'
+        import json, sys
+        try:
+            data = json.load(open(sys.argv[1]))
+            if "runs" in data:  # SARIF
+                results = data.get("runs", [{}])[0].get("results", [])
+                total = len(results)
+                critical = sum(1 for r in results if r.get("level") == "error")
+                high = sum(1 for r in results if r.get("level") == "warning")
+            else:  # native JSON
+                summary = data.get("summary", {})
+                total = summary.get("total_findings", 0)
+                critical = summary.get("critical", 0)
+                high = summary.get("high", 0)
+            print(f"{total},{critical},{high}")
+        except Exception as exc:  # noqa: BLE001 - surfaced to the workflow log
+            print(f"::warning::Could not parse {sys.argv[1]}: {exc}", file=sys.stderr)
+            print("0,0,0")
+        PY
+        )
+          IFS=',' read -r TOTAL CRITICAL HIGH <<< "$FINDINGS"
+        else
+          TOTAL="unknown"; CRITICAL="unknown"; HIGH="unknown"
+        fi
+
+        {
+          echo "findings-count=$TOTAL"
+          echo "critical-count=$CRITICAL"
+          echo "high-count=$HIGH"
+          echo "report-path=$REPORT_FILE"
+          echo "sarif-path=$REPORT_FILE"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "## OWASP Agent Memory Guard — scan results"
+          echo
+          if [ "$TOTAL" != "0" ] && [ "$TOTAL" != "unknown" ]; then
+            echo "**$TOTAL finding(s)** — $CRITICAL critical, $HIGH high"
+          else
+            echo "No memory security findings."
+          fi
+          echo
+          echo "Report: \`$REPORT_FILE\`"
+          echo
+          echo "[What these findings mean](https://owasp.org/www-project-agent-memory-guard/)"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        exit $SCAN_EXIT
+
+    - name: Upload SARIF to the Security tab
+      if: always() && inputs.upload-sarif == 'true' && inputs.output-format == 'sarif'
       uses: github/codeql-action/upload-sarif@v3
       with:
-        sarif_file: results.sarif
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
+      continue-on-error: true
+
+    - name: Upload scan report as an artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: amg-security-report
+        path: ${{ steps.scan.outputs.report-path }}
+      continue-on-error: true

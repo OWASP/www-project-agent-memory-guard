@@ -62,28 +62,44 @@ jobs:
             "https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json" \
             | python3 -c "import json,sys; print(int(json.load(sys.stdin)['count']))")
 
-          TOTAL=$((AMG + LANGCHAIN + CLONES))
           echo "amg=$AMG" >> $GITHUB_OUTPUT
           echo "langchain=$LANGCHAIN" >> $GITHUB_OUTPUT
           echo "clones=$CLONES" >> $GITHUB_OUTPUT
-          echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          echo "Total: $TOTAL (AMG PyPI: $AMG, LangChain PyPI: $LANGCHAIN, Clones: $CLONES)"
+          echo "PyPI: $AMG core + $LANGCHAIN langchain = $((AMG + LANGCHAIN)) installs; clones: $CLONES (not installs)"
 
-      - name: Update README with latest total
+      - name: Update the README figures
         run: |
           set -euo pipefail
-          TOTAL=${{ steps.downloads.outputs.total }}
-          DISPLAY=$(python3 -c "print(f'{$TOTAL:,}+')")
-          # Every component is an all-time count, so the total can only grow. A drop
-          # means a source failed to parse — or that the README was hand-edited to a
-          # number above what the sources actually report. Either way, publishing it
-          # would be wrong, so stop and say so.
-          CURRENT=$(grep -o '### 📦 [0-9][0-9,]*+ total downloads' README.md | grep -o '[0-9][0-9,]*' | head -1 | tr -d ',')
-          if [ -n "$CURRENT" ] && [ "$TOTAL" -lt "$CURRENT" ]; then
-            echo "::error::Computed total ($TOTAL) is below the published count ($CURRENT). Either a download source failed to parse, or README.md was hand-edited above the real total — not updating README."
+          AMG=${{ steps.downloads.outputs.amg }}
+          LANGCHAIN=${{ steps.downloads.outputs.langchain }}
+          CLONES=${{ steps.downloads.outputs.clones }}
+          PYPI=$((AMG + LANGCHAIN))
+
+          # The README heading reports installs and clones as two separate figures:
+          #   ### 📦 7,699 PyPI downloads · 9,465 repository clones
+          # An earlier version of this step looked for "N+ total downloads", which has
+          # not existed in the README since the figures were split. The pattern simply
+          # stopped matching, sed silently changed nothing, and the step reported
+          # "No changes to commit" on every run - so the published numbers froze while
+          # the workflow went on looking healthy. The guard below exists so that a
+          # non-matching pattern fails loudly instead of quietly freezing the figures.
+          if ! grep -qE '^### 📦 [0-9,]+ PyPI downloads · [0-9,]+ repository clones' README.md; then
+            echo "::error::The README adoption heading does not match the expected format. Expected a line like '### 📦 7,699 PyPI downloads · 9,465 repository clones'. Refusing to guess - fix the heading or this step."
             exit 1
           fi
-          sed -i "s/### 📦 [0-9,]*+ total downloads/### 📦 $DISPLAY total downloads/" README.md
+
+          # Both are all-time counts, so neither can legitimately fall. A drop means a
+          # source failed to parse, or the README was hand-edited above what the
+          # sources report.
+          CUR_PYPI=$(grep -oE '^### 📦 [0-9,]+ PyPI' README.md | grep -oE '[0-9,]+' | tr -d ',')
+          if [ -n "${CUR_PYPI:-}" ] && [ "$PYPI" -lt "$CUR_PYPI" ]; then
+            echo "::error::Computed PyPI total ($PYPI) is below the published figure ($CUR_PYPI). A source failed to parse, or the README was hand-edited above the real total - not updating."
+            exit 1
+          fi
+
+          PYPI_D=$(python3 -c "print(f'{$PYPI:,}')")
+          CLONES_D=$(python3 -c "print(f'{$CLONES:,}')")
+          sed -i -E "s/^### 📦 [0-9,]+ PyPI downloads · [0-9,]+ repository clones/### 📦 $PYPI_D PyPI downloads · $CLONES_D repository clones/" README.md
 
       - name: Commit and push if changed
         run: |

@@ -1,86 +1,112 @@
 name: Track Referrers & Analytics
 
+# CHANGES IN THIS FILE
+#
+# 1. `permissions: contents: write` moved off the top level and onto the single
+#    job that commits. A top-level write grant applies to every job in the file
+#    and is what OpenSSF Scorecard flags as excessive token permissions.
+#
+# 2. Secret name reconciled. This workflow read `secrets.CLONE_COUNT_TOKEN`
+#    while clone.yml reads `secrets.SECRET_TOKEN`. Unless both secrets exist with
+#    identical scopes, one of the two has been failing silently — `gh api` writes
+#    an error body into the JSON file and the step still exits 0, so the
+#    committed analytics would be files full of error text. Both now use
+#    SECRET_TOKEN, and the fetch is checked.
+#
+# 3. Fixed the SUMMARY.md heredoc. It used a quoted delimiter (<<'SCRIPT'),
+#    which suppresses expansion — so the committed file contained the literal
+#    text `$(date -u +"%Y-%m-%d %H:%M UTC")` rather than a timestamp, every day.
+#
+# 4. Added `--fail-with-body` handling so a revoked token stops the run instead
+#    of committing 4 files of API errors over the top of yesterday's real data.
+
 on:
   schedule:
     - cron: '0 1 * * *'  # Daily at 01:00 UTC
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   track:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
-      - name: Collect GitHub Traffic Referrers
+      - name: Collect GitHub traffic referrers
         env:
-          GH_TOKEN: ${{ secrets.CLONE_COUNT_TOKEN }}
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
-          # Create analytics directory
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::SECRET_TOKEN is not set. The traffic API is not reachable with the built-in GITHUB_TOKEN."
+            exit 1
+          fi
           mkdir -p analytics
+          DATE=$(date +%Y-%m-%d)
+          REPO=${{ github.repository }}
 
-          # Get referrer data (top 10 referrers in last 14 days)
-          gh api repos/OWASP/www-project-agent-memory-guard/traffic/popular/referrers \
-            > analytics/referrers-$(date +%Y-%m-%d).json
+          fetch() {
+            endpoint="$1"; out="$2"
+            if ! gh api "repos/${REPO}/traffic/${endpoint}" > "analytics/${out}-${DATE}.json"; then
+              echo "::error::traffic/${endpoint} failed. Refusing to commit partial analytics."
+              exit 1
+            fi
+          }
 
-          # Get referring paths
-          gh api repos/OWASP/www-project-agent-memory-guard/traffic/popular/paths \
-            > analytics/paths-$(date +%Y-%m-%d).json
+          fetch "popular/referrers" "referrers"
+          fetch "popular/paths"     "paths"
+          fetch "views"             "views"
+          fetch "clones"            "clones"
 
-          # Get views
-          gh api repos/OWASP/www-project-agent-memory-guard/traffic/views \
-            > analytics/views-$(date +%Y-%m-%d).json
-
-          # Get clones
-          gh api repos/OWASP/www-project-agent-memory-guard/traffic/clones \
-            > analytics/clones-$(date +%Y-%m-%d).json
-
-      - name: Collect PyPI Download Stats
+      - name: Collect PyPI download stats
         run: |
-          # Get PyPI download stats by version
-          curl -s "https://pypistats.org/api/packages/agent-memory-guard/overall?mirrors=true" \
-            > analytics/pypi-agent-memory-guard-$(date +%Y-%m-%d).json
+          set -euo pipefail
+          DATE=$(date +%Y-%m-%d)
+          curl -fsS --retry 3 "https://pypistats.org/api/packages/agent-memory-guard/overall?mirrors=true" \
+            > "analytics/pypi-agent-memory-guard-${DATE}.json"
+          curl -fsS --retry 3 "https://pypistats.org/api/packages/langchain-agent-memory-guard/overall?mirrors=true" \
+            > "analytics/pypi-langchain-amg-${DATE}.json"
+          curl -fsS --retry 3 "https://pypistats.org/api/packages/agent-memory-guard/system?mirrors=true" \
+            > "analytics/pypi-systems-${DATE}.json"
 
-          curl -s "https://pypistats.org/api/packages/langchain-agent-memory-guard/overall?mirrors=true" \
-            > analytics/pypi-langchain-amg-$(date +%Y-%m-%d).json
-
-          # Get country breakdown
-          curl -s "https://pypistats.org/api/packages/agent-memory-guard/system?mirrors=true" \
-            > analytics/pypi-systems-$(date +%Y-%m-%d).json
-
-      - name: Generate Summary Report
+      - name: Generate summary report
         run: |
-          cat > analytics/SUMMARY.md << 'SCRIPT'
+          set -euo pipefail
+          # Unquoted delimiter so the timestamp actually expands.
+          cat > analytics/SUMMARY.md <<EOF
           # AMG Analytics Summary
-          
-          Generated: $(date -u +"%Y-%m-%d %H:%M UTC")
-          
-          ## How to Read This Data
-          
-          - `referrers-*.json` — Which websites send visitors to the repo (top 10)
-          - `paths-*.json` — Which pages in the repo get the most views
-          - `views-*.json` — Daily page views (14-day rolling window)
-          - `clones-*.json` — Daily git clones (14-day rolling window)
-          - `pypi-*.json` — PyPI download stats by day
-          - `pypi-systems-*.json` — Downloads by OS (Linux/macOS/Windows = CI vs real users)
-          
-          ## Key Metrics to Watch
-          
-          1. **Referrer sources** — Which channel drove the most traffic?
-          2. **Clone-to-star ratio** — High clones + low stars = CI/bots; balanced = real adoption
-          3. **OS breakdown** — Linux-heavy = CI pipelines; macOS/Windows = developers
-          4. **Version distribution** — Are users on latest? Old versions = stale tutorials
-          
-          ## Decision Framework
-          
-          - If referrer X drove 50+ views → double down on that channel
-          - If OS is 90%+ Linux → downloads are mostly CI, not humans
-          - If a specific path gets high views → that content resonates, create more like it
-          SCRIPT
 
-      - name: Commit Analytics Data
+          Generated: $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          ## How to read this data
+
+          - \`referrers-*.json\` — which sites send visitors to the repo (top 10)
+          - \`paths-*.json\` — which pages in the repo get the most views
+          - \`views-*.json\` — daily page views (14-day rolling window)
+          - \`clones-*.json\` — daily git clones (14-day rolling window)
+          - \`pypi-*.json\` — PyPI downloads by day
+          - \`pypi-systems-*.json\` — downloads by OS (Linux-heavy implies CI, not humans)
+
+          ## What to watch
+
+          1. **Referrer sources** — which channel drove the most traffic?
+          2. **Clone-to-star ratio** — high clones with low stars means CI and scrapers, not adoption
+          3. **OS breakdown** — 90%+ Linux means the downloads are pipelines
+          4. **Version distribution** — users stuck on old versions usually means a stale tutorial somewhere
+
+          ## Reading it honestly
+
+          Clones are not downloads and downloads are not users. A single CI
+          pipeline that installs on every run produces thousands of downloads and
+          zero adopters. When a number jumps, check \`pypi-systems-*.json\` before
+          treating it as growth.
+          EOF
+
+      - name: Commit analytics data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

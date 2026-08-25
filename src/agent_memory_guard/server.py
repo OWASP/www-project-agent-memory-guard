@@ -52,13 +52,41 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS is opt-in, and deliberately so.
+#
+# This app ships no authentication. Combining that with allow_origins=["*"] and
+# allow_credentials=True meant any web page the operator visited could POST to
+# /write on their locally running server and put arbitrary content into the
+# guarded memory store - or POST /reset and clear the guard's state. For a tool
+# whose purpose is preventing untrusted writes to agent memory, shipping a
+# browser-reachable unauthenticated write endpoint by default was the wrong
+# default.
+#
+# Note that Starlette does not send a literal "*" when allow_credentials is set:
+# it echoes the requesting origin back, which makes the wildcard MORE permissive
+# than it looks, not less.
+#
+# Set AMG_CORS_ORIGINS to a comma-separated list of exact origins to enable it:
+#     AMG_CORS_ORIGINS="http://localhost:3000,https://console.internal"
+_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("AMG_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if _cors_origins:
+    if "*" in _cors_origins:
+        raise SystemExit(
+            "AMG_CORS_ORIGINS=* is not supported. This server has no authentication, "
+            "so allowing every origin would let any web page write to the memory store. "
+            "List the exact origins you need."
+        )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 
 # Initialize guard based on environment
 _policy_name = os.environ.get("AMG_POLICY", "strict")

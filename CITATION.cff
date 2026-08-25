@@ -21,7 +21,7 @@ authors:
 repository-code: "https://github.com/OWASP/www-project-agent-memory-guard"
 url: "https://owasp.org/www-project-agent-memory-guard/"
 license: Apache-2.0
-version: "0.3.0"
+version: "0.3.1"
 keywords:
   - LLM agents
   - agent security
