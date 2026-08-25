@@ -10,9 +10,9 @@
 
 <div align="center">
 
-### 📦 17,414+ total downloads
+### 📦 7,699 PyPI downloads · 9,465 repository clones
 
-[![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) ![Clones](https://img.shields.io/badge/clones-253-blue) [![Unique Cloners](https://img.shields.io/badge/dynamic/json?color=success&label=Unique%20Cloners&query=uniques&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
+[![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) [![Unique Cloners](https://img.shields.io/badge/dynamic/json?color=success&label=Unique%20Cloners&query=uniques&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
 </div>
 
@@ -69,13 +69,13 @@ That's it. Three lines to protect your agent's memory. **No API keys. No externa
 
 ---
 
-## Who's using it
+## Where it has been recognized and engaged
 
-| Organization | Use case |
+| Context | What happened |
 |---|---|
-| **OWASP Foundation** | Reference implementation for ASI06: Memory Poisoning |
-| **Microsoft** | Agentic AI security research |
-| **Enterprise teams** | Multi-tenant agent deployments with compliance requirements |
+| **OWASP Foundation** | Official Incubator project; reference implementation for ASI06: Memory Poisoning |
+| **MITRE ATLAS** | Named in the Memory Hardening mitigation as an open-source implementation of memory-hardening controls |
+| **Public design review** | Architecture discussed with practitioners in issue threads on microsoft/autogen, langchain-ai/langgraph, BerriAI/litellm and 567-labs/instructor |
 
 > Using AMG in production? [Add your team →](https://github.com/OWASP/www-project-agent-memory-guard/issues/new?title=Add+adopter&labels=adopter)
 
