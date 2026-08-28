@@ -33,6 +33,9 @@ from agent_memory_guard.events import Action, Severity
 
 _VALID_ACTIONS = {a.value for a in Action}
 
+# Detector whose events are gated on the policy's protected/immutable key lists.
+_PROTECTED_KEY_DETECTOR = "protected_key"
+
 
 @dataclass
 class PolicyRule:
@@ -89,11 +92,14 @@ class Policy:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Policy:
         rules = [_parse_rule(r) for r in data.get("rules", [])]
+        protected_keys = tuple(data.get("protected_keys", ()) or ())
+        immutable_keys = tuple(data.get("immutable_keys", ()) or ())
+        _check_key_rules_have_keys(rules, protected_keys, immutable_keys)
         return cls(
             version=int(data.get("version", 1)),
             default_action=_parse_action(data.get("default_action", "allow")),
-            protected_keys=tuple(data.get("protected_keys", ()) or ()),
-            immutable_keys=tuple(data.get("immutable_keys", ()) or ()),
+            protected_keys=protected_keys,
+            immutable_keys=immutable_keys,
             rules=rules,
         )
 
@@ -308,6 +314,33 @@ def load_policy(source: str | Path | dict[str, Any]) -> Policy:
     else:
         data = yaml.safe_load(text)
     return Policy.from_dict(data or {})
+
+
+def _check_key_rules_have_keys(
+    rules: Iterable[PolicyRule],
+    protected_keys: tuple[str, ...],
+    immutable_keys: tuple[str, ...],
+) -> None:
+    """Reject a policy whose protected-key rules can never fire.
+
+    ProtectedKeyDetector only reports a key that matches one of the policy's
+    protected or immutable patterns, so with neither list populated a rule on
+    that detector is inert. A rule's own ``keys`` does not rescue it: that
+    narrows which reported keys the rule handles, and nothing is reported.
+
+    Loading such a policy without complaint is the part worth avoiding, since
+    the guard still runs and still enforces its other rules, so there is no
+    later symptom to notice.
+    """
+    dead = [r.name for r in rules if r.on == _PROTECTED_KEY_DETECTOR]
+    if dead and not protected_keys and not immutable_keys:
+        raise ValueError(
+            "Policy rule(s) "
+            + ", ".join(repr(n) for n in dead)
+            + f" act on {_PROTECTED_KEY_DETECTOR!r}, but the policy declares no "
+            "'protected_keys' and no 'immutable_keys', so they can never match. "
+            "Declare the keys to guard, or drop the rule(s)."
+        )
 
 
 def merge_protected_keys(policy: Policy, extra: Iterable[str] = ()) -> tuple[str, ...]:
