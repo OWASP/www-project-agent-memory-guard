@@ -404,9 +404,9 @@ class MemoryGuard:
 
         self._store.set(key, committed_value)
 
-        # Independent (non-agent-authored) writes reset the self-reinforcement
-        # cool-down: arrival of new external/user evidence is what breaks a
-        # self-poisoning loop.
+        # Independent (non-agent-authored) writes decay the self-reinforcement
+        # cool-down: arrival of new external/user evidence weakens a
+        # self-poisoning loop without erasing its history.
         if normalised_source_class != SourceClass.AGENT_AUTHORED:
             self._self_reinforcement_detector.note_independent_write(key)
 
