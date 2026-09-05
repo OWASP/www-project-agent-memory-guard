@@ -51,3 +51,60 @@ def test_rule_filters_by_min_severity():
     )
     assert p.decide("size_anomaly", Severity.MEDIUM, "k") == Action.ALLOW
     assert p.decide("size_anomaly", Severity.HIGH, "k") == Action.BLOCK
+
+
+def test_protected_key_rule_without_keys_is_rejected():
+    """A rule on protected_key with no keys declared can never fire.
+
+    ProtectedKeyDetector only reports keys matching the policy's protected or
+    immutable patterns, so with neither declared the rule is inert while the
+    policy still loads and the guard still enforces its other rules. Nothing
+    downstream reveals it, so it has to be caught at load time.
+    """
+    import pytest
+
+    data = {
+        "default_action": "allow",
+        "rules": [
+            {"name": "block_injection", "on": "prompt_injection", "action": "block"},
+            {"name": "block_protected_key", "on": "protected_key", "action": "block"},
+        ],
+    }
+
+    with pytest.raises(ValueError) as excinfo:
+        Policy.from_dict(data)
+
+    message = str(excinfo.value)
+    assert "block_protected_key" in message
+    assert "protected_keys" in message
+
+
+def test_protected_key_rule_accepts_either_key_list():
+    """Either list is enough to make the rule reachable."""
+    base = {
+        "default_action": "allow",
+        "rules": [
+            {"name": "block_protected_key", "on": "protected_key", "action": "block"},
+        ],
+    }
+
+    assert Policy.from_dict({**base, "protected_keys": ["identity.*"]}).protected_keys == (
+        "identity.*",
+    )
+    assert Policy.from_dict({**base, "immutable_keys": ["identity.*"]}).immutable_keys == (
+        "identity.*",
+    )
+
+
+def test_policy_without_a_protected_key_rule_still_loads_with_no_keys():
+    """Only rules on that detector are affected; nothing else changes."""
+    data = {
+        "default_action": "allow",
+        "rules": [
+            {"name": "block_injection", "on": "prompt_injection", "action": "block"},
+        ],
+    }
+
+    policy = Policy.from_dict(data)
+    assert policy.protected_keys == ()
+    assert [r.name for r in policy.rules] == ["block_injection"]
