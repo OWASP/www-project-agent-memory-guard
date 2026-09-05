@@ -12,6 +12,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > all. Content has been preserved where it existed and reconstructed from tags and
 > commit history where it did not.
 
+## [Unreleased]
+
+### Added
+
+- **Agent Memory Security Benchmark (AMSB)** — a framework-neutral benchmark and
+  leaderboard that grades any agent memory system for resilience to the
+  memory-poisoning lifecycle (plant → survive context reset → recall). Ships the
+  `agent_memory_guard.bench` package (adapter contract, scenario corpus, harness,
+  SSL-Labs-style scoring with grade ceilings, report renderer), an `amg-bench` CLI,
+  offline baselines (unguarded dict + two AMG configurations), and opt-in reference
+  adapters for mem0/Letta/Zep. AMG is graded arm's-length as one system among others.
+  Committed results under `benchmarks/memory-systems/`.
+
 ## [0.3.1] - 2026-08-25
 
 ### Fixed

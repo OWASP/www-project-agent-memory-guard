@@ -112,6 +112,37 @@ Tested against 55 real-world attack payloads across 4 threat categories:
 python benchmarks/security_benchmark.py   # reproduce locally
 ```
 
+## Agent Memory Security Benchmark (AMSB)
+
+The numbers above measure AMG's own detectors on single writes. The **Agent
+Memory Security Benchmark** is a separate, framework-neutral scoreboard that
+grades **any** memory system on the full poisoning lifecycle — a payload is
+planted, **survives a context reset**, and is read back on a later turn. Any
+system that implements a three-method adapter (`remember` / `recall` /
+`context_reset`) gets a 0–100 resilience score and an SSL-Labs-style letter
+grade, with hard grade ceilings for catastrophic breaches.
+
+AMG authors the benchmark **and submits itself for grading**, measured through
+the identical adapter and corpus as every other entry. The results are not
+curated to flatter it:
+
+| System | Grade | Score | Notes |
+|--------|-------|-------|-------|
+| agent-memory-guard (hardened) | **A** | 93.9 | declared protected keys + persistence detector |
+| agent-memory-guard (strict preset) | **F** | 53.1 | bare `Policy.strict()` — no protected keys, no persistence detector |
+| unguarded-dict | **F** | 0.0 | the resilience floor |
+
+The `strict` preset scores **F** because `Policy.strict()` ships with no
+`protected_keys` declared and no persistence detector, so it breaches the
+identity-escalation and delayed-activation attacks — a real, honest finding
+about the documented quickstart config, surfaced by AMG's own benchmark. See
+[`benchmarks/memory-systems/`](benchmarks/memory-systems/) for the full
+leaderboard, methodology, and how to grade a new system.
+
+```bash
+amg-bench --out benchmarks/memory-systems   # reproduce; grade mem0/Letta/Zep with --systems
+```
+
 ## What it does
 
 - **Integrity** — SHA-256 baselines flag out-of-band tampering with immutable keys.
