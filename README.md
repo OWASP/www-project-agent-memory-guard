@@ -138,7 +138,9 @@ history = GuardedChatMessageHistory(
 
 ### LangChain middleware
 
-Full agent protection — model inputs, outputs, **and tool outputs** (the primary injection vector):
+Full agent protection — model inputs, outputs, **and tool outputs** (the primary injection vector).
+
+📦 [`langchain-agent-memory-guard`](https://pypi.org/project/langchain-agent-memory-guard/) · [Integration source](integrations/langchain-agent-memory-guard) · [Policy.strict repro](https://gist.github.com/vgudur-dev/ead8817d2f4df08c04b808cc5b53eb06)
 
 ```bash
 pip install langchain-agent-memory-guard
