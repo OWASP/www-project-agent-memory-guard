@@ -138,7 +138,9 @@ history = GuardedChatMessageHistory(
 
 ### LangChain middleware
 
-Full agent protection — model inputs, outputs, **and tool outputs** (the primary injection vector):
+Full agent protection — model inputs, outputs, **and tool outputs** (the primary injection vector).
+
+**Links:** [integration package](https://github.com/OWASP/www-project-agent-memory-guard/tree/main/integrations/langchain-agent-memory-guard) · PyPI [`langchain-agent-memory-guard`](https://pypi.org/project/langchain-agent-memory-guard/) · [5-minute how-to Discussion](https://github.com/OWASP/www-project-agent-memory-guard/discussions/116) · [public clinic Gist](https://gist.github.com/vgudur-dev/ead8817d2f4df08c04b808cc5b53eb06) (`Policy.strict()` repro, ~15 min)
 
 ```bash
 pip install langchain-agent-memory-guard
@@ -151,9 +153,11 @@ from langchain_agent_memory_guard import MemoryGuardMiddleware
 agent = create_agent(
     "openai:gpt-4o",
     tools=[my_search_tool, my_db_tool],
-    middleware=[MemoryGuardMiddleware()],
+    middleware=[MemoryGuardMiddleware()],  # default: block on violation
 )
 ```
+
+Optional: pass `policy=Policy.strict()` or `on_violation="warn"|"strip"|"block"`. After the clinic, open an issue titled `Adopter: <name> — LangChain` with stack versions.
 
 ### OpenAI Agents SDK
 
