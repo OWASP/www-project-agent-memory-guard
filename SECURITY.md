@@ -70,8 +70,9 @@ free to disclose on your own timeline.
 
 ## Deployment notes that affect your security posture
 
-- `Policy.strict()` declares no `protected_keys` by default, so identity and system keys
-  are not protected out of the box. Declare them explicitly. (Tracked as #89.)
+- `Policy.strict()` ships with `protected_keys` covering `identity.*`, `system.*`, and
+  `agent.goal` so the documented quickstart blocks those writes out of the box. Extend
+  the tuple (or load YAML) for additional namespaces.
 - The API server (`amg serve`) binds `0.0.0.0:8000` and ships **no authentication**. Run
   it on a private network or behind your own authenticating proxy. Do not expose it.
 

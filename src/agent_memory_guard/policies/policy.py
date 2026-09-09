@@ -103,8 +103,21 @@ class Policy:
 
     @classmethod
     def strict(cls) -> Policy:
+        """Production-oriented preset: block injection, redact secrets, and
+        protect identity/system/goal keys out of the box.
+
+        ``block_protected_key`` only fires for keys that match
+        ``protected_keys``. Shipping an empty tuple made the rule a no-op and
+        left the documented quickstart (``MemoryGuard(policy=Policy.strict())``)
+        unable to block writes to ``identity.*`` / ``system.*`` (see #89).
+        """
         return cls(
             default_action=Action.ALLOW,
+            protected_keys=(
+                "identity.*",
+                "system.*",
+                "agent.goal",
+            ),
             rules=[
                 PolicyRule("block_injection", "prompt_injection", Action.BLOCK),
                 PolicyRule("redact_secrets", "sensitive_data", Action.REDACT),

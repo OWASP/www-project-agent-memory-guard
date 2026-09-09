@@ -35,6 +35,17 @@ def test_strict_policy_blocks_injection_and_redacts_secrets():
     assert p.decide("size_anomaly", Severity.MEDIUM, "k") == Action.QUARANTINE
 
 
+def test_strict_policy_protects_identity_and_system_keys():
+    """Regression for #89 — block_protected_key must have keys to match."""
+    p = Policy.strict()
+    assert "identity.*" in p.protected_keys
+    assert "system.*" in p.protected_keys
+    assert "agent.goal" in p.protected_keys
+    assert p.decide("protected_key", Severity.HIGH, "identity.role") == Action.BLOCK
+    assert p.decide("protected_key", Severity.HIGH, "system.prompt") == Action.BLOCK
+    assert p.decide("protected_key", Severity.HIGH, "agent.goal") == Action.BLOCK
+
+
 def test_rule_filters_by_min_severity():
     p = load_policy(
         {
