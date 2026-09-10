@@ -98,3 +98,22 @@ def test_size_quarantine_does_not_persist():
     assert decision == Action.QUARANTINE
     assert g.read("buf") is None
     assert "buf" in g.quarantine
+
+
+def test_strict_policy_protects_identity_and_system_keys():
+    # Policy.strict() carries a block_protected_key rule, but the detector only
+    # fires on keys matching policy.protected_keys, so an empty tuple left the
+    # documented quickstart accepting writes to identity.* and system.*.
+    guard = MemoryGuard(policy=Policy.strict())
+
+    for key in ("identity.role", "system.prompt", "agent.goal"):
+        with pytest.raises(PolicyViolation):
+            guard.write(key, "superadmin")
+
+
+def test_strict_policy_still_allows_ordinary_keys():
+    guard = MemoryGuard(policy=Policy.strict())
+
+    guard.write("session.notes", "hello")
+
+    assert guard.read("session.notes") == "hello"

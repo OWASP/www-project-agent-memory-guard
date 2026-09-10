@@ -14,7 +14,7 @@ This detector enforces two rules per (key) over a rolling window:
    `similarity_threshold` to a recently stored `agent_authored` value on
    the same key is treated as reinforcement of the previous write, not
    independent corroboration. A separate `external_tool` or `user_input`
-   write resets the counter (independent evidence breaks the loop).
+   write decays the counter (independent evidence weakens the loop).
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class SelfReinforcementDetector:
 
     Only fires on writes whose source_class is AGENT_AUTHORED. Writes from other
     source classes (EXTERNAL_TOOL, USER_INPUT, SYSTEM) are treated as independent
-    evidence and reset the cool-down counter.
+    evidence and decay the cool-down counter by one.
 
     Attributes:
         name: The unique identifier for this detector.
@@ -85,15 +85,17 @@ class SelfReinforcementDetector:
     def note_independent_write(self, key: str) -> None:
         """Record an independent (non-agent-authored) write on a key.
 
-        This clears the self-reinforcement cool-down history for that key,
-        preventing subsequent writes from being flagged as self-reinforcement.
+        This decays the self-reinforcement cool-down history for that key by
+        removing its oldest entry, so independent evidence weakens rather than
+        completely erases the signal.
 
         Args:
             key: The memory key written to.
         """
         history = self._by_key.get(key)
         if history is not None:
-            history.writes.clear()
+            if history.writes:
+                history.writes.popleft()
             history.last_independent_write_at = time.monotonic()
 
     def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:

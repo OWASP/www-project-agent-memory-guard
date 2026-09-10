@@ -10,7 +10,7 @@
 
 <div align="center">
 
-### 📦 7,812 PyPI downloads · 9,549 repository clones
+### 📦 9,834 PyPI downloads · 11,497 repository clones
 
 [![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) [![Unique Cloners](https://img.shields.io/badge/dynamic/json?color=success&label=Unique%20Cloners&query=uniques&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
@@ -169,7 +169,9 @@ history = GuardedChatMessageHistory(
 
 ### LangChain middleware
 
-Full agent protection — model inputs, outputs, **and tool outputs** (the primary injection vector):
+Full agent protection — model inputs, outputs, **and tool outputs** (the primary injection vector).
+
+**Links:** [integration package](https://github.com/OWASP/www-project-agent-memory-guard/tree/main/integrations/langchain-agent-memory-guard) · PyPI [`langchain-agent-memory-guard`](https://pypi.org/project/langchain-agent-memory-guard/) · [5-minute how-to Discussion](https://github.com/OWASP/www-project-agent-memory-guard/discussions/116) · [public clinic Gist](https://gist.github.com/vgudur-dev/ead8817d2f4df08c04b808cc5b53eb06) (`Policy.strict()` repro, ~15 min)
 
 ```bash
 pip install langchain-agent-memory-guard
@@ -182,9 +184,11 @@ from langchain_agent_memory_guard import MemoryGuardMiddleware
 agent = create_agent(
     "openai:gpt-4o",
     tools=[my_search_tool, my_db_tool],
-    middleware=[MemoryGuardMiddleware()],
+    middleware=[MemoryGuardMiddleware()],  # default: block on violation
 )
 ```
+
+Optional: pass `policy=Policy.strict()` or `on_violation="warn"|"strip"|"block"`. After the clinic, open an issue titled `Adopter: <name> — LangChain` with stack versions.
 
 ### OpenAI Agents SDK
 
