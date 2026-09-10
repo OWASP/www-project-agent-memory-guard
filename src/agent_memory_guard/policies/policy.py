@@ -103,8 +103,16 @@ class Policy:
 
     @classmethod
     def strict(cls) -> Policy:
+        """Pre-configured policy for the documented quickstart.
+
+        ``protected_keys`` has to be populated for the ``block_protected_key``
+        rule below to ever fire: ``ProtectedKeyDetector`` only reports a key
+        that matches one of these patterns. The namespaces are the ones the
+        examples and the README already treat as protected.
+        """
         return cls(
             default_action=Action.ALLOW,
+            protected_keys=("identity.*", "system.*", "agent.goal"),
             rules=[
                 PolicyRule("block_injection", "prompt_injection", Action.BLOCK),
                 PolicyRule("redact_secrets", "sensitive_data", Action.REDACT),

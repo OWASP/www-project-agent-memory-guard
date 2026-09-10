@@ -51,3 +51,13 @@ def test_rule_filters_by_min_severity():
     )
     assert p.decide("size_anomaly", Severity.MEDIUM, "k") == Action.ALLOW
     assert p.decide("size_anomaly", Severity.HIGH, "k") == Action.BLOCK
+
+
+def test_strict_policy_declares_protected_keys():
+    # block_protected_key below is inert without these: ProtectedKeyDetector
+    # only reports keys matching one of the patterns.
+    p = Policy.strict()
+
+    assert p.protected_keys
+    assert "identity.*" in p.protected_keys
+    assert "system.*" in p.protected_keys
