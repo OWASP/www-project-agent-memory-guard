@@ -70,8 +70,10 @@ free to disclose on your own timeline.
 
 ## Deployment notes that affect your security posture
 
-- `Policy.strict()` declares no `protected_keys` by default, so identity and system keys
-  are not protected out of the box. Declare them explicitly. (Tracked as #89.)
+- `Policy.strict()` (0.3.2+) declares `identity.*`, `system.*`, and `agent.goal` so its
+  `block_protected_key` rule can fire. Earlier 0.3.x builds shipped an empty
+  `protected_keys` tuple for that preset (#89 / #90). Custom YAML policies still need
+  explicit key lists when they use a `protected_key` rule (#92 / #120).
 - The API server (`amg serve`) binds `0.0.0.0:8000` and ships **no authentication**. Run
   it on a private network or behind your own authenticating proxy. Do not expose it.
 

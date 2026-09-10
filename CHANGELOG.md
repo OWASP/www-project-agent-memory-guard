@@ -12,6 +12,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > all. Content has been preserved where it existed and reconstructed from tags and
 > commit history where it did not.
 
+## [0.3.2] - 2026-09-09
+
+### Fixed
+
+- **`Policy.strict()` protected-key rule could never fire.** The preset shipped
+  `block_protected_key` with an empty `protected_keys` tuple, so identity/system
+  writes were allowed in the documented quickstart. `Policy.strict()` now declares
+  `identity.*`, `system.*`, and `agent.goal` — the same tuple already used in the
+  project examples. Thanks [@arpitjain099](https://github.com/arpitjain099). ([#90], [#89])
+
+- **Independent writes could wipe self-reinforcement history.** A single
+  attacker-controlled `USER_INPUT` write cleared the entire detector window.
+  Independent non-agent writes now decay history by one entry instead of resetting
+  it. Scope is bounded: this does not claim to prevent all reset/evasion patterns.
+  Thanks [@Moviw](https://github.com/Moviw). ([#109], [#87])
+
+- **YAML policies with a dead `protected_key` rule loaded silently.**
+  `Policy.from_dict` now raises when a rule acts on `protected_key` but both
+  `protected_keys` and `immutable_keys` are empty, so an inert control cannot
+  look live. Check remains in `from_dict` only (constructor-built presets
+  unaffected). Original design by [@arpitjain099](https://github.com/arpitjain099);
+  rebased as [#120] after [#90]. ([#120], [#106], [#92])
+
+### Changed
+
+- README LangChain middleware section now links the wrapper package, how-to
+  Discussion, and public clinic Gist. ([#118])
+
 ## [0.3.1] - 2026-08-25
 
 ### Fixed
@@ -107,8 +135,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial project structure and OWASP proposal
 - Basic memory guard concept and architecture design
 
+[#120]: https://github.com/OWASP/www-project-agent-memory-guard/pull/120
+[#118]: https://github.com/OWASP/www-project-agent-memory-guard/pull/118
+[#109]: https://github.com/OWASP/www-project-agent-memory-guard/pull/109
+[#106]: https://github.com/OWASP/www-project-agent-memory-guard/pull/106
+[#92]: https://github.com/OWASP/www-project-agent-memory-guard/issues/92
+[#90]: https://github.com/OWASP/www-project-agent-memory-guard/pull/90
+[#89]: https://github.com/OWASP/www-project-agent-memory-guard/issues/89
+[#87]: https://github.com/OWASP/www-project-agent-memory-guard/issues/87
 [#93]: https://github.com/OWASP/www-project-agent-memory-guard/pull/93
 [#94]: https://github.com/OWASP/www-project-agent-memory-guard/pull/94
+[0.3.2]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.2.1...v0.2.2
