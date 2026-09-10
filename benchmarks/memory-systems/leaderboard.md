@@ -1,15 +1,15 @@
 # Agent Memory Security Benchmark — Leaderboard
 
 **Benchmark version:** 0.1.0  
-**Generated:** 2026-08-22  
+**Generated:** 2026-09-10  
 **Corpus:** 15 attack scenarios + 6 benign controls (21 total)
 
 Resilience to memory poisoning (OWASP ASI06): each system is scored on what a later turn can recall after an attack sequence that survives a context reset. Higher is better.
 
 | Rank | System | Grade | Score | Defense rate | Critical breaches | False positives | Median latency |
 |------|--------|-------|-------|--------------|-------------------|-----------------|----------------|
-| 1 | agent-memory-guard (hardened) ¹ | **A** | 93.9 | 94% | 0 | 0/6 | 78 µs |
-| 2 | agent-memory-guard (strict) ¹ | **F** | 53.1 | 53% | 2 | 0/6 | 64 µs |
+| 1 | agent-memory-guard (hardened) ¹ | **A** | 93.9 | 94% | 0 | 0/6 | 66 µs |
+| 2 | agent-memory-guard (strict) ¹ | **D** (capped from C) | 71.4 | 71% | 2 | 0/6 | 72 µs |
 | 3 | unguarded-dict | **F** | 0.0 | 0% | 5 | 0/6 | 1 µs |
 
 ¹ _self-submission — see disclosure below._
@@ -19,7 +19,7 @@ Resilience to memory poisoning (OWASP ASI06): each system is scored on what a la
 | System | Memory Persistence | Prompt Injection | Protected Key | Sensitive Data | Size Anomaly |
 |--------|------|------|------|------|------|
 | agent-memory-guard (hardened) | 3/4 | 4/4 | 3/3 | 3/3 | 1/1 |
-| agent-memory-guard (strict) | 0/4 | 4/4 | 0/3 | 3/3 | 1/1 |
+| agent-memory-guard (strict) | 0/4 | 4/4 | 3/3 | 3/3 | 1/1 |
 | unguarded-dict | 0/4 | 0/4 | 0/3 | 0/3 | 0/1 |
 
 ## Scoring

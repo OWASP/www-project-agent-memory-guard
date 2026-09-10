@@ -129,13 +129,17 @@ curated to flatter it:
 | System | Grade | Score | Notes |
 |--------|-------|-------|-------|
 | agent-memory-guard (hardened) | **A** | 93.9 | declared protected keys + persistence detector |
-| agent-memory-guard (strict preset) | **F** | 53.1 | bare `Policy.strict()` — no protected keys, no persistence detector |
+| agent-memory-guard (strict preset) | **D** | 71.4 | `Policy.strict()` — declared protected keys, no persistence detector |
 | unguarded-dict | **F** | 0.0 | the resilience floor |
 
-The `strict` preset scores **F** because `Policy.strict()` ships with no
-`protected_keys` declared and no persistence detector, so it breaches the
-identity-escalation and delayed-activation attacks — a real, honest finding
-about the documented quickstart config, surfaced by AMG's own benchmark. See
+The `strict` preset scores **D**: `Policy.strict()` now declares protected keys
+(fixed in 0.3.2, [#90](https://github.com/OWASP/www-project-agent-memory-guard/pull/90))
+so it defends the identity-escalation attacks, but it
+still loads no persistence detector — the delayed-activation attacks survive a
+context reset, and two critical breaches cap the grade at D. A real, honest
+finding about the documented quickstart config, surfaced by AMG's own benchmark:
+the benchmark independently confirms the 0.3.2 fix and still flags the residual
+persistence gap. See
 [`benchmarks/memory-systems/`](benchmarks/memory-systems/) for the full
 leaderboard, methodology, and how to grade a new system.
 

@@ -79,13 +79,15 @@ To keep the ranking honest:
   other system.
 - Its rows are marked *self-submission* on the leaderboard.
 - The results are not curated to flatter AMG. The `strict` preset — the bare
-  three-line `Policy.strict()` from the README quickstart — scores **F** here,
-  because `Policy.strict()` ships with no `protected_keys` declared and does not
-  load the opt-in persistence detector, so it breaches the identity-escalation
-  and delayed-activation attacks. The `hardened` configuration (declared
-  protected keys + the persistence detector) is what closes those gaps, and even
-  it carries one documented residual miss: a one-word adjective inserted before
-  "system directive" evades the fixed-pattern persistence matcher.
+  three-line `Policy.strict()` from the README quickstart — scores **D** here.
+  As of 0.3.2, `Policy.strict()` declares protected keys (PR #90, which closed
+  the gap an earlier run of this benchmark reported), so it now defends the
+  identity-escalation attacks; but it still does not load the opt-in persistence
+  detector, so the delayed-activation attacks survive a context reset and two
+  critical breaches cap the grade at D. The `hardened` configuration (declared
+  protected keys + the persistence detector) is what closes the persistence gap,
+  and even it carries one documented residual miss: a one-word adjective inserted
+  before "system directive" evades the fixed-pattern persistence matcher.
 
 Those are real findings about AMG, surfaced by AMG's own benchmark. That is the
 point: a public scoreboard is only worth publishing if it can grade its author

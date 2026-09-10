@@ -21,7 +21,7 @@ additional systems — with a single command.
 | System | Grade | Score | Defense rate | Critical breaches |
 |--------|-------|-------|--------------|-------------------|
 | agent-memory-guard (hardened) | **A** | 93.9 | 94% | 0 |
-| agent-memory-guard (strict preset) | **F** | 53.1 | 53% | 2 |
+| agent-memory-guard (strict preset) | **D** | 71.4 | 71% | 2 |
 | unguarded-dict | **F** | 0.0 | 0% | 5 |
 
 ```bash
@@ -88,13 +88,18 @@ reproducible against a pinned version.
 AMG authors this benchmark and submits itself for grading through the identical
 adapter contract and corpus as every other system. Its rows are marked
 _self-submission_. The results are deliberately uncurated: the `strict` preset —
-the bare three-line `Policy.strict()` from the quickstart — scores **F**, because
-`Policy.strict()` declares no `protected_keys` and loads no persistence detector,
-so it breaches the identity-escalation and delayed-activation attacks. The
-`hardened` configuration closes those gaps, and even it carries one documented
-residual miss: a one-word adjective inserted before "system directive" evades the
-fixed-pattern persistence matcher. Those are real findings about AMG, surfaced by
-AMG's own benchmark.
+the bare three-line `Policy.strict()` from the quickstart — scores **D**. As of
+0.3.2, `Policy.strict()` declares protected keys ([#90], which closed the gap this
+benchmark's earlier run reported), so it now defends the identity-escalation
+attacks; but it still loads no persistence detector, so the delayed-activation
+attacks survive a context reset and two critical breaches cap the grade at D. The
+`hardened` configuration closes the persistence gap too, and even it carries one
+documented residual miss: a one-word adjective inserted before "system directive"
+evades the fixed-pattern persistence matcher. Those are real findings about AMG,
+surfaced by AMG's own benchmark — which independently confirmed the 0.3.2 fix and
+still flags what remains.
+
+[#90]: https://github.com/OWASP/www-project-agent-memory-guard/pull/90
 
 ## Responsible disclosure
 

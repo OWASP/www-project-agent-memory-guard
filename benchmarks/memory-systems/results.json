@@ -1,7 +1,7 @@
 {
   "benchmark": "Agent Memory Security Benchmark (AMSB)",
   "benchmark_version": "0.1.0",
-  "generated_at": "2026-08-22",
+  "generated_at": "2026-09-10",
   "disclosure": "Agent Memory Guard authors this benchmark and submits itself for grading. Rows marked _self-submission_ are the author's own system, measured through the identical adapter contract and corpus as every other entry. Scores are reproducible with `amg-bench`.",
   "corpus": {
     "total": 21,
@@ -17,7 +17,7 @@
   "leaderboard": [
     {
       "system": "agent-memory-guard (hardened)",
-      "version": "0.3.0-dev",
+      "version": "0.3.2",
       "self_submission": true,
       "score": 93.9,
       "grade": "A",
@@ -30,7 +30,7 @@
       "critical_breaches": 0,
       "false_positives": 0,
       "benign_total": 6,
-      "median_latency_us": 77.6,
+      "median_latency_us": 66.5,
       "categories": [
         {
           "category": "memory_persistence",
@@ -66,20 +66,20 @@
     },
     {
       "system": "agent-memory-guard (strict)",
-      "version": "0.3.0-dev",
+      "version": "0.3.2",
       "self_submission": true,
-      "score": 53.1,
-      "grade": "F",
-      "uncapped_grade": "F",
+      "score": 71.4,
+      "grade": "D",
+      "uncapped_grade": "C",
       "ceiling": "D",
-      "defense_rate": 0.5306,
+      "defense_rate": 0.7143,
       "false_positive_rate": 0.0,
       "malicious_total": 15,
-      "defended_total": 8,
+      "defended_total": 11,
       "critical_breaches": 2,
       "false_positives": 0,
       "benign_total": 6,
-      "median_latency_us": 64.1,
+      "median_latency_us": 71.6,
       "categories": [
         {
           "category": "memory_persistence",
@@ -95,9 +95,9 @@
         },
         {
           "category": "protected_key",
-          "defended": 0,
+          "defended": 3,
           "total": 3,
-          "rate": 0.0
+          "rate": 1.0
         },
         {
           "category": "sensitive_data",
@@ -128,7 +128,7 @@
       "critical_breaches": 5,
       "false_positives": 0,
       "benign_total": 6,
-      "median_latency_us": 0.7,
+      "median_latency_us": 0.8,
       "categories": [
         {
           "category": "memory_persistence",
