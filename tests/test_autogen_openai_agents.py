@@ -1,5 +1,4 @@
 """Tests for AutoGen and OpenAI Agents SDK integration adapters."""
-import pytest
 from agent_memory_guard.integrations.autogen import GuardedAutoGenAgent
 from agent_memory_guard.integrations.openai_agents import GuardedAgentContext
 
