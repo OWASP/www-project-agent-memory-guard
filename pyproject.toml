@@ -44,6 +44,7 @@ dependencies = ["PyYAML>=6.0"]
 
 [project.scripts]
 amg = "agent_memory_guard.cli:main"
+amg-bench = "agent_memory_guard.bench.cli:main"
 
 [project.optional-dependencies]
 server = ["fastapi>=0.100", "uvicorn[standard]>=0.20", "pydantic>=2.0"]
@@ -108,6 +109,7 @@ omit = [
     "*/tools.py",
     "*/detectors/ml_injection.py",
     "*/detectors/anomaly.py",
+    "*/bench/adapters/third_party.py",
 ]
 
 [tool.coverage.report]
