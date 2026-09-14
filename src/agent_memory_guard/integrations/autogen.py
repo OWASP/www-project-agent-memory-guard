@@ -13,10 +13,11 @@ from agent_memory_guard.guard import MemoryGuard
 
 _HAS_AUTOGEN = False
 try:  # pragma: no cover - optional dependency
-    from autogen import ConversableAgent  # type: ignore
+    from autogen import Agent, ConversableAgent  # type: ignore
 
     _HAS_AUTOGEN = True
 except Exception:  # pragma: no cover - optional dependency
+    Agent = object  # type: ignore[assignment, misc]
     ConversableAgent = object  # type: ignore[assignment, misc]
 
 
@@ -79,6 +80,53 @@ class GuardedAutoGenAgent:
         msg = message if isinstance(message, dict) else {"content": message}
         if self.screen_message(msg, "autogen_receive"):
             self._agent.receive(message, sender, request_reply=request_reply)
+
+
+def install_guard(
+    agent: Any,
+    guard: MemoryGuard | None = None,
+    *,
+    drop_blocked: bool = True,
+) -> Any:
+    """Attach memory-poisoning screening to a live AutoGen agent's reply loop.
+
+    Registers a ``register_reply`` hook (position 0, so it runs first) that
+    screens each inbound message through ``guard``. Blocked content is
+    swallowed — the hook consumes the turn with an empty reply instead of
+    letting the poisoned message drive the agent's reasoning.
+
+    Unlike :class:`GuardedAutoGenAgent` (which only intercepts explicit
+    ``.send()`` / ``.receive()`` calls), this hook also covers messages
+    flowing through group chats and internal reply dispatch.
+    """
+    if not _HAS_AUTOGEN:
+        raise ImportError(
+            "agent-memory-guard[autogen] not installed; "
+            "pip install agent-memory-guard[autogen]"
+        )
+    guard = guard or MemoryGuard()
+
+    def _screen_reply(
+        recipient: Any, messages: list | None, sender: Any, config: Any
+    ) -> tuple[bool, Any]:
+        if not messages:
+            return False, None
+        last = messages[-1]
+        content = last.get("content", "") if isinstance(last, dict) else str(last)
+        sender_name = getattr(sender, "name", "unknown")
+        key = f"autogen.hooked.{sender_name}.{id(last)}"
+        try:
+            decision = guard.write(key, content, source="autogen_hook")
+        except PolicyViolation:
+            if drop_blocked:
+                return True, ""
+            raise
+        if decision != Action.ALLOW and drop_blocked:
+            return True, ""
+        return False, None
+
+    agent.register_reply([Agent, None], _screen_reply, position=0)
+    return agent
 
 
 class GuardedGroupChatManager:

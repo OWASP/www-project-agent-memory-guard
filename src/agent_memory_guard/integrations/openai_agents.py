@@ -96,8 +96,18 @@ class GuardedHandoff:
 
     def transfer(self, context: dict) -> bool:
         key = f"openai_agents.handoff.{self.from_agent}.{self.to_agent}"
+        seen_events = len(self.guard.events)
         try:
-            self.guard.write(key, str(context), source="openai_agents_handoff")
+            decision = self.guard.write(
+                key, str(context), source="openai_agents_handoff"
+            )
         except PolicyViolation:
             return False
+        if decision != Action.ALLOW:
+            return False
+        # Detector-chain verdict: even when the policy allows the write, refuse
+        # the handoff if the detectors flagged injection in this payload.
+        for event in self.guard.events[seen_events:]:
+            if event.key == key and "injection" in event.detector:
+                return False
         return True
