@@ -13,20 +13,27 @@ This detector enforces two rules per (key) over a rolling window:
 2. **Self-similarity**: an `agent_authored` write whose value is >= the
    `similarity_threshold` to a recently stored `agent_authored` value on
    the same key is treated as reinforcement of the previous write, not
-   independent corroboration. A separate `external_tool` or `user_input`
-   write decays the counter (independent evidence weakens the loop).
+   independent corroboration. A trusted non-agent write can decay the
+   counter (independent evidence weakens the loop).
 """
 from __future__ import annotations
 
 import difflib
 import time
 from collections import deque
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
 from agent_memory_guard.detectors.injection import _stringify
 from agent_memory_guard.events import Severity, SourceClass
+
+_DEFAULT_TRUSTED_SOURCE_CLASSES: frozenset[SourceClass] = frozenset(
+    source_class
+    for source_class in SourceClass
+    if source_class != SourceClass.AGENT_AUTHORED
+)
 
 
 @dataclass
@@ -40,9 +47,11 @@ class _SelfWriteHistory:
 class SelfReinforcementDetector:
     """Flags rapid, self-similar agent_authored writes to the same key.
 
-    Only fires on writes whose source_class is AGENT_AUTHORED. Writes from other
-    source classes (EXTERNAL_TOOL, USER_INPUT, SYSTEM) are treated as independent
-    evidence and decay the cool-down counter by one.
+    Only fires on writes whose source_class is AGENT_AUTHORED. By default,
+    non-agent source classes retain the existing behavior and are eligible to
+    decay the cool-down counter. Deployments with a stronger trust boundary can
+    pass ``trusted_source_classes`` so provenance alone does not imply
+    independent corroboration.
 
     Attributes:
         name: The unique identifier for this detector.
@@ -58,16 +67,35 @@ class SelfReinforcementDetector:
         similarity_threshold: float = 0.85,
         history_size: int = 8,
         severity: Severity = Severity.MEDIUM,
+        trusted_source_classes: Collection[SourceClass] | None = None,
     ) -> None:
         if max_self_writes < 1:
             raise ValueError("max_self_writes must be >= 1")
         if not 0.0 <= similarity_threshold <= 1.0:
             raise ValueError("similarity_threshold must be in [0, 1]")
+        trusted: frozenset[SourceClass]
+        if trusted_source_classes is None:
+            trusted = _DEFAULT_TRUSTED_SOURCE_CLASSES
+        else:
+            trusted_values = tuple(trusted_source_classes)
+            if not all(
+                isinstance(source_class, SourceClass)
+                for source_class in trusted_values
+            ):
+                raise TypeError(
+                    "trusted_source_classes must contain SourceClass values"
+                )
+            trusted = frozenset(trusted_values)
+            if SourceClass.AGENT_AUTHORED in trusted:
+                raise ValueError(
+                    "AGENT_AUTHORED cannot be an independent trusted source"
+                )
         self._cooldown = cooldown_seconds
         self._max_self_writes = max_self_writes
         self._similarity_threshold = similarity_threshold
         self._history_size = history_size
         self._severity = severity
+        self._trusted_source_classes = trusted
         self._by_key: dict[str, _SelfWriteHistory] = {}
 
     def reset(self, key: str | None = None) -> None:
@@ -82,16 +110,26 @@ class SelfReinforcementDetector:
         else:
             self._by_key.pop(key, None)
 
-    def note_independent_write(self, key: str) -> None:
-        """Record an independent (non-agent-authored) write on a key.
+    def note_independent_write(
+        self, key: str, source_class: SourceClass | None = None
+    ) -> None:
+        """Record a trusted independent write on a key.
 
         This decays the self-reinforcement cool-down history for that key by
-        removing its oldest entry, so independent evidence weakens rather than
-        completely erases the signal.
+        removing its oldest entry, so trusted independent evidence weakens
+        rather than completely erases the signal.
 
         Args:
             key: The memory key written to.
+            source_class: Provenance class of the independent write. When
+                supplied, only configured trusted classes may decay history.
+                Omitting it preserves the legacy direct-call behavior.
         """
+        if (
+            source_class is not None
+            and source_class not in self._trusted_source_classes
+        ):
+            return
         history = self._by_key.get(key)
         if history is not None:
             if history.writes:
@@ -166,9 +204,7 @@ class SelfReinforcementDetector:
 
 
 def _quick_ratio(a: str, b: str) -> float:
-    """Cheap upper-bound similarity ratio. ``difflib.SequenceMatcher`` is O(N*M)
-    in the worst case; for long strings we cap the comparison length to keep
-    the detector under the project's sub-100µs latency budget."""
+    """Cheap upper-bound similarity ratio with capped comparison length."""
     if not a or not b:
         return 0.0
     cap = 1024

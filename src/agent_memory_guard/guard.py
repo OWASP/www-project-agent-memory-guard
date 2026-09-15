@@ -404,11 +404,12 @@ class MemoryGuard:
 
         self._store.set(key, committed_value)
 
-        # Independent (non-agent-authored) writes decay the self-reinforcement
-        # cool-down: arrival of new external/user evidence weakens a
-        # self-poisoning loop without erasing its history.
+        # Committed non-agent writes may decay self-reinforcement history only
+        # when their provenance class is configured as trusted corroboration.
         if normalised_source_class != SourceClass.AGENT_AUTHORED:
-            self._self_reinforcement_detector.note_independent_write(key)
+            self._self_reinforcement_detector.note_independent_write(
+                key, normalised_source_class
+            )
 
         if target_class is not None:
             existing_task = self._classification.task_of(key)
