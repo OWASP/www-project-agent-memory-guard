@@ -22,6 +22,7 @@ Community contributions are welcome for any item below.
 | Vector-store protection | Guard vector embeddings from poisoning | Planned |
 | Real-time dashboard | Web UI for monitoring security events | Planned |
 | GitHub Action scanner | CI action to scan agent projects for vulnerabilities | Planned |
+| Agent Memory Security Benchmark (AMSB) | Cross-system resilience leaderboard grading any memory system against the poisoning lifecycle (`amg-bench`) | Delivered (v0.1) |
 | Benchmark suite | Performance overhead measurements across frameworks | Planned |
 
 ## v1.0.0 — Q4 2026
