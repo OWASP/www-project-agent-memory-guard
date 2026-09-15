@@ -224,7 +224,7 @@ runs:
 
     - name: Upload scan report as an artifact
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: amg-security-report
         path: ${{ steps.scan.outputs.report-path }}
