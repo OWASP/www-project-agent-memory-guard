@@ -517,8 +517,9 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
     ax1.legend()
 
     # Box plot comparison
-    bp = ax2.boxplot([attack_latencies, benign_latencies], labels=["Attack Payloads", "Benign Operations"],
+    bp = ax2.boxplot([attack_latencies, benign_latencies],
                      patch_artist=True, widths=0.5)
+    ax2.set_xticklabels(["Attack Payloads", "Benign Operations"])
     bp["boxes"][0].set_facecolor(COLORS["danger"])
     bp["boxes"][0].set_alpha(0.3)
     bp["boxes"][1].set_facecolor(COLORS["success"])

@@ -7,4 +7,8 @@ def test_demo_runs_to_completion(capsys) -> None:
 
     output = capsys.readouterr().out
     assert "BLOCKED [prompt_injection]" in output
-    assert "Results: 4 allowed" in output
+    assert "BLOCKED [protected_key]" in output
+    assert "REDACTED" in output
+    assert "QUARANTINED" in output
+    assert "Results: 4/4 legitimate writes allowed, 5/5 attacks caught" in output
+    assert "MISSED" not in output
