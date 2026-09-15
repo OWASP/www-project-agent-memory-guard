@@ -122,12 +122,18 @@ runs:
 
     - name: Install Agent Memory Guard
       shell: bash
+      # Inputs reach the script as environment variables, never as interpolated text: an
+      # expression is substituted before bash parses the line, so a value carrying a quote
+      # or a semicolon would become command text rather than an argument.
+      env:
+        AMG_SKIP_INSTALL: ${{ inputs.skip-install }}
+        AMG_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        if [ "${{ inputs.skip-install }}" = "true" ]; then
+        if [ "$AMG_SKIP_INSTALL" = "true" ]; then
           echo "skip-install set - using the agent-memory-guard already on PATH."
-        elif [ -n "${{ inputs.version }}" ]; then
-          pip install --quiet "agent-memory-guard==${{ inputs.version }}"
+        elif [ -n "$AMG_VERSION" ]; then
+          pip install --quiet "agent-memory-guard==$AMG_VERSION"
         else
           pip install --quiet agent-memory-guard
         fi
@@ -141,20 +147,26 @@ runs:
     - name: Run memory security scan
       id: scan
       shell: bash
+      env:
+        AMG_SCAN_PATH: ${{ inputs.scan-path }}
+        AMG_MIN_SEVERITY: ${{ inputs.min-severity }}
+        AMG_OUTPUT_FORMAT: ${{ inputs.output-format }}
+        AMG_INCLUDE: ${{ inputs.include-patterns }}
+        AMG_EXCLUDE: ${{ inputs.exclude-patterns }}
       run: |
         set +e
 
-        case "${{ inputs.output-format }}" in
+        case "$AMG_OUTPUT_FORMAT" in
           sarif) REPORT_FILE="amg-results.sarif" ;;
           json)  REPORT_FILE="amg-results.json" ;;
           *)     REPORT_FILE="amg-results.txt" ;;
         esac
 
-        amg scan "${{ inputs.scan-path }}" \
-          --severity "${{ inputs.min-severity }}" \
-          --format "${{ inputs.output-format }}" \
-          --include "${{ inputs.include-patterns }}" \
-          --exclude "${{ inputs.exclude-patterns }}" \
+        amg scan "$AMG_SCAN_PATH" \
+          --severity "$AMG_MIN_SEVERITY" \
+          --format "$AMG_OUTPUT_FORMAT" \
+          --include "$AMG_INCLUDE" \
+          --exclude "$AMG_EXCLUDE" \
           --output "$REPORT_FILE" \
           ${{ inputs.fail-on-findings == 'true' && '--fail-on-findings' || '' }}
 
@@ -165,7 +177,7 @@ runs:
           exit 1
         fi
 
-        if [ "${{ inputs.output-format }}" = "sarif" ] || [ "${{ inputs.output-format }}" = "json" ]; then
+        if [ "$AMG_OUTPUT_FORMAT" = "sarif" ] || [ "$AMG_OUTPUT_FORMAT" = "json" ]; then
           FINDINGS=$(python3 - "$REPORT_FILE" <<'PY'
         import json, sys
         try:
@@ -229,3 +241,4 @@ runs:
         name: amg-security-report
         path: ${{ steps.scan.outputs.report-path }}
       continue-on-error: true
+
