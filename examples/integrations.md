@@ -66,27 +66,43 @@ MemoryGuardMiddleware(on_violation="strip")  # silently remove offending content
 ## OpenAI Agents SDK
 
 The OpenAI Agents SDK has no opinion about where you keep agent memory — it is
-usually a dict or a small KV scratchpad. Wrap your store with `MemoryGuard`:
+usually a dict or a small KV scratchpad. Wrap your store with `MemoryGuard`,
+and treat **tool outputs** as untrusted (`SourceClass.EXTERNAL_TOOL`) before
+they enter session memory.
+
+Runnable slice (no SDK install required):
+`examples/openai_agents_memory_guard.py` — screens tool outputs, queues blocked
+writes for HITL review. Full drop-in adapters (`GuardedAgentContext`,
+`GuardedToolOutput`, `GuardedHandoff`) are tracked in issue #8 / PR #22.
 
 ```python
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard.events import SourceClass
 from agent_memory_guard.storage import InMemoryStore
 
 guard = MemoryGuard(InMemoryStore(), policy=Policy.strict())
 
-def remember(key: str, value: str) -> None:
+def remember_tool_output(tool_name: str, output: str) -> bool:
     try:
-        guard.write(key, value, source="openai-agent")
+        guard.write(
+            f"openai_agents.tool.{tool_name}",
+            output,
+            source="openai_agents_tool",
+            source_class=SourceClass.EXTERNAL_TOOL,
+        )
     except PolicyViolation as exc:
-        # Injection / protected key / leakage — surface to caller or drop
+        # Route to HITL / eval harness instead of poisoning the next turn
         print("blocked:", exc)
+        return False
+    return True
 
 def recall(key: str) -> str | None:
     return guard.read(key, sink="openai-agent")
 ```
 
-Expose `remember` and `recall` as tools (or call them inside your tool
-implementations) and every write is screened before it can poison future turns.
+Expose `remember_tool_output` / `recall` as tools (or call them inside your
+tool implementations) and every write is screened before it can poison future
+turns.
 
 ---
 
@@ -115,6 +131,11 @@ def guarded_append(history: list[dict], message: dict) -> None:
 
 For tool results (the highest-risk surface), call `guarded_append` before
 returning the tool output into the agent loop.
+
+A dedicated integration package also lives at
+`integrations/autogen-agent-memory-guard/` (PyPI-style sibling of the LangChain
+middleware package). In-tree `integrations/autogen.py` drop-ins are tracked with
+issue #8 / PR #22 alongside the OpenAI Agents adapters.
 
 ---
 
