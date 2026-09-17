@@ -241,4 +241,3 @@ runs:
         name: amg-security-report
         path: ${{ steps.scan.outputs.report-path }}
       continue-on-error: true
-
