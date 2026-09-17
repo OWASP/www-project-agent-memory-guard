@@ -20,8 +20,11 @@ Always report against the latest release. Fixes land on the newest minor line fi
 That keeps the report private until a fix is ready and gives us a place to work with you
 on it.
 
-If you cannot use that, contact the project leaders listed on the
-[project page](https://owasp.org/www-project-agent-memory-guard/).
+If private vulnerability reporting is unavailable, email
+[`project-agent-memory-guard-leaders@owasp.org`](mailto:project-agent-memory-guard-leaders@owasp.org).
+Use a minimal description at first and do not send credentials, personal data, production
+memory, or employer/customer-confidential material. Maintainers can coordinate a safer
+channel if additional evidence is needed.
 
 **Please do not open a public issue for a security defect.**
 
@@ -74,9 +77,17 @@ free to disclose on your own timeline.
   `block_protected_key` rule can fire. Earlier 0.3.x builds shipped an empty
   `protected_keys` tuple for that preset (#89 / #90). Custom YAML policies still need
   explicit key lists when they use a `protected_key` rule (#92 / #120).
-- The API server (`amg serve`) binds `0.0.0.0:8000` and ships **no authentication**. Run
-  it on a private network or behind your own authenticating proxy. Do not expose it.
+- The API server (`amg serve`) binds `127.0.0.1:8000` by default and ships **no built-in
+  authentication, authorization, TLS, tenant isolation, or rate limiting**. Browser CORS is
+  disabled unless exact origins are supplied through `AMG_CORS_ORIGINS`; the wildcard `*`
+  is rejected. CORS is not authentication. A non-loopback deployment requires an
+  authenticated, authorized, TLS-terminating gateway and network controls. Restrict the
+  memory read/write, event, statistics, file-scan, and administrative reset endpoints.
 
-## Credit
+## Credit and response record
 
-We credit reporters in the advisory and release notes unless you ask us not to.
+We credit reporters in the advisory and release notes unless they request anonymity. The
+private response record should preserve the affected versions, scope and severity assessment,
+remediation decision, reporter credit preference, linked tests and release, and coordinated
+disclosure date. If a report is determined not to be a vulnerability, maintainers will explain
+the decision without publishing confidential report content.
