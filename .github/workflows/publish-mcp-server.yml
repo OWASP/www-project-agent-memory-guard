@@ -1,0 +1,118 @@
+name: Publish MCP server to PyPI
+
+# Publishes mcp-server/ (the `amg-mcp-server` package) to PyPI via trusted
+# publishing, mirroring publish.yml. Manual trigger only, dry-run by default:
+# a run with dry_run=true executes every verification gate and stops short of
+# the upload, so the first click is safe.
+#
+# ONE-TIME SETUP before the first real (dry_run=false) run:
+#   1. PyPI: add a "pending publisher" for the project name `amg-mcp-server`
+#      at https://pypi.org/manage/account/publishing/ with:
+#        owner:       OWASP
+#        repository:  www-project-agent-memory-guard
+#        workflow:    publish-mcp-server.yml
+#        environment: pypi-mcp
+#   2. GitHub: create the `pypi-mcp` environment under
+#      Settings → Environments (optionally with required reviewers).
+#
+# Gates before any upload:
+#   - server.json's declared versions must equal the package version — the MCP
+#     Registry validates this and rejects a mismatch.
+#   - twine check must pass on both built artifacts.
+#   - the wheel must install into a clean environment with the
+#     `amg-mcp-server` console script present and `server.main` importable.
+#     (This gate exists because an uncapped `mcp` dependency once resolved to
+#     the 2.x SDK, which removed mcp.server.fastmcp — the package built and
+#     passed twine check, and crashed only at the user's terminal.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run every gate but skip the PyPI upload"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: "Gate: server.json version matches the package version"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, sys, tomllib
+
+          with open("mcp-server/pyproject.toml", "rb") as fh:
+              pkg = tomllib.load(fh)["project"]["version"]
+          with open("mcp-server/server.json", encoding="utf-8") as fh:
+              sj = json.load(fh)
+
+          declared = [("server.json version", sj["version"])] + [
+              (f"server.json packages[{i}].version", p["version"])
+              for i, p in enumerate(sj.get("packages", []))
+          ]
+          bad = [(where, v) for where, v in declared if v != pkg]
+          for where, v in bad:
+              print(f"::error::{where} is {v} but the package version is {pkg}. "
+                    "The MCP Registry rejects this mismatch.", file=sys.stderr)
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Build package
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+          python -m build --outdir dist mcp-server/
+
+      - name: "Gate: twine check"
+        run: twine check --strict dist/*
+
+      - name: "Gate: wheel installs, console script exists, main is importable"
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/gate-venv
+          /tmp/gate-venv/bin/pip install --quiet dist/*.whl
+          if [ ! -x /tmp/gate-venv/bin/amg-mcp-server ]; then
+            echo "::error::The amg-mcp-server console script was not installed. server.json tells users to run 'uvx amg-mcp-server'; publishing without the entry point fails only at their terminal."
+            exit 1
+          fi
+          /tmp/gate-venv/bin/python -c "from amg_mcp_server.server import main; assert callable(main)"
+          echo "All install gates passed."
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: mcp-dist
+          path: dist/
+
+  publish:
+    needs: build
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-mcp
+      url: https://pypi.org/p/amg-mcp-server
+    permissions:
+      id-token: write  # Required for trusted publishing
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: mcp-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # release/v1
