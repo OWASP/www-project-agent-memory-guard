@@ -161,14 +161,28 @@ Optional: pass `policy=Policy.strict()` or `on_violation="warn"|"strip"|"block"`
 
 ### OpenAI Agents SDK
 
+Screen tool outputs before they enter session memory. Runnable example:
+[`examples/openai_agents_memory_guard.py`](examples/openai_agents_memory_guard.py)
+(HITL queue on block). Full SDK adapters: issue [#8](https://github.com/OWASP/www-project-agent-memory-guard/issues/8) / PR [#22](https://github.com/OWASP/www-project-agent-memory-guard/pull/22).
+
 ```python
-from agent_memory_guard import MemoryGuard, Policy
+from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard.events import SourceClass
 from agent_memory_guard.storage import InMemoryStore
 
 guard = MemoryGuard(InMemoryStore(), policy=Policy.strict())
 
-def remember(key: str, value: str) -> None:
-    guard.write(key, value, source="openai-agent")
+def remember_tool_output(tool_name: str, output: str) -> bool:
+    try:
+        guard.write(
+            f"openai_agents.tool.{tool_name}",
+            output,
+            source="openai_agents_tool",
+            source_class=SourceClass.EXTERNAL_TOOL,
+        )
+    except PolicyViolation:
+        return False  # enqueue for HITL / eval — do not poison session memory
+    return True
 
 def recall(key: str) -> str | None:
     return guard.read(key, sink="openai-agent")
