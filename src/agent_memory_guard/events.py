@@ -33,13 +33,18 @@ class SourceType(str, Enum):
 
 
 class SourceClass(str, Enum):
-    """Internal provenance class for self-reinforcement detection.
+    """Caller-supplied provenance class for self-reinforcement detection.
 
     The taxonomy comes from the three-layer ASI06 architecture discussed on
     microsoft/autogen#7683 — `external_tool` and `user_input` are external
     inputs (untrusted by default), `agent_authored` covers an agent writing
     back its own reasoning (the self-poisoning surface), `system` is
     config/admin/runtime infrastructure.
+
+    SourceClass is metadata supplied by the caller. It does not authenticate a
+    principal, verify source identity, or prove that content is trustworthy.
+    Deployments must establish those properties independently before treating
+    a provenance class as trusted corroboration.
     """
     EXTERNAL_TOOL = "external_tool"
     USER_INPUT = "user_input"
@@ -59,7 +64,8 @@ class SecurityEvent:
         key: The memory key being accessed.
         message: Descriptive log message outlining the finding.
         operation: The database/memory operation name. Defaults to "write".
-        source_class: Provenance of the write operation. Defaults to SourceClass.UNKNOWN.
+        source_class: Caller-supplied provenance metadata for the write operation;
+            not an authentication or identity assertion. Defaults to SourceClass.UNKNOWN.
         receipt_uri: Optional URI pointing to an external cryptographically signed audit receipt.
             Defaults to None.
         source_type: Legacy provenance type. Defaults to SourceType.UNKNOWN.
