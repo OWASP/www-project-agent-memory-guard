@@ -51,6 +51,8 @@ ml = ["transformers>=4.30", "torch>=2.0"]
 langchain = ["langchain-core>=0.1"]
 crewai = ["crewai>=0.1"]
 llamaindex = ["llama-index-core>=0.10"]
+autogen = ["pyautogen>=0.2"]
+openai-agents = ["openai-agents>=0.1"]
 all = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
@@ -58,6 +60,8 @@ all = [
     "transformers>=4.30",
     "torch>=2.0",
     "langchain-core>=0.1",
+    "pyautogen>=0.2",
+    "openai-agents>=0.1",
 ]
 redis = ["redis[hiredis]>=5.0.0"]
 test = ["pytest>=7.0", "coverage>=7.0", "httpx>=0.24", "fakeredis>=2.0.0"]
