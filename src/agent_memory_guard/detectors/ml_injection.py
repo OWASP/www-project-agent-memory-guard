@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
+from agent_memory_guard.detectors.injection import _stringify
 from agent_memory_guard.events import Severity
 
 # Severity ordering helper
@@ -183,16 +184,3 @@ class MLInjectionDetector:
     def is_available(self) -> bool:
         """Check if the ML model is loaded and available."""
         return self._available and self._pipeline is not None
-
-
-def _stringify(value: Any) -> str:
-    """Convert value to string for classification."""
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (list, tuple, set)):
-        return "\n".join(_stringify(v) for v in value)
-    if isinstance(value, dict):
-        return "\n".join(f"{k}: {_stringify(v)}" for k, v in value.items())
-    return str(value)

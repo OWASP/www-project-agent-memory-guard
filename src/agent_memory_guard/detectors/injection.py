@@ -74,13 +74,29 @@ class PromptInjectionDetector:
         )
 
 
-def _stringify(value: Any) -> str:
+MAX_STRINGIFY_DEPTH = 50
+"""Maximum container nesting `_stringify` will descend.
+
+Bounded so that a deeply nested value cannot raise ``RecursionError`` inside a
+detector. ``MemoryGuard._run_detectors`` swallows detector exceptions so that a
+detector can never break the agent, which means an unbounded walk here turns a
+nesting-depth pad into a silent bypass of every content detector.
+"""
+
+TRUNCATION_MARKER = "<amg:max-depth>"
+
+
+def _stringify(value: Any, _depth: int = 0) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
         return value
+    if isinstance(value, (list, tuple, set, dict)) and _depth >= MAX_STRINGIFY_DEPTH:
+        return TRUNCATION_MARKER
     if isinstance(value, (list, tuple, set)):
-        return "\n".join(_stringify(v) for v in value)
+        return "\n".join(_stringify(v, _depth + 1) for v in value)
     if isinstance(value, dict):
-        return "\n".join(f"{k}: {_stringify(v)}" for k, v in value.items())
+        return "\n".join(
+            f"{k}: {_stringify(v, _depth + 1)}" for k, v in value.items()
+        )
     return str(value)

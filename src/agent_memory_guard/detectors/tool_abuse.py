@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from agent_memory_guard.detectors.base import DetectionResult
+from agent_memory_guard.detectors.injection import _stringify
 from agent_memory_guard.events import Severity
 
 # Patterns that indicate tool abuse attempts
@@ -159,16 +160,3 @@ class ToolAbuseDetector:
                 "operation": operation,
             },
         )
-
-
-def _stringify(value: Any) -> str:
-    """Convert value to string for analysis."""
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (list, tuple, set)):
-        return "\n".join(_stringify(v) for v in value)
-    if isinstance(value, dict):
-        return "\n".join(f"{k}: {_stringify(v)}" for k, v in value.items())
-    return str(value)
