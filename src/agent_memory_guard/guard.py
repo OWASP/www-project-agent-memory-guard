@@ -121,8 +121,8 @@ class MemoryGuard:
                 # actually runs.
                 self._self_reinforcement_detector = user_self_reinf
 
-        for key in self._policy.immutable_keys:
-            if key in self._store:
+        for key in list(self._store.keys()):
+            if self._policy.is_immutable(key):
                 self._integrity.baseline(key, self._store.get(key))
 
     # ---- public API ---------------------------------------------------
@@ -418,7 +418,7 @@ class MemoryGuard:
                 task_id=task_id if task_id is not None else existing_task or self._current_task,
             )
 
-        if key in self._policy.immutable_keys and not self._integrity.has_baseline(key):
+        if self._policy.is_immutable(key) and not self._integrity.has_baseline(key):
             self._integrity.baseline(key, committed_value)
 
         if any(v.matched for v in verdicts) and decision == Action.ALLOW:

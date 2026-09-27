@@ -22,6 +22,7 @@ Example policy:
 """
 from __future__ import annotations
 
+import fnmatch
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -82,6 +83,16 @@ class Policy:
     immutable_keys: tuple[str, ...] = ()
     rules: list[PolicyRule] = field(default_factory=list)
     version: int = 1
+
+    def is_immutable(self, key: str) -> bool:
+        """True if `key` matches any ``immutable_keys`` glob.
+
+        ``immutable_keys`` is documented as glob patterns and is glob-matched by
+        the deletion guard via :func:`merge_protected_keys`. Matching it exactly
+        anywhere else would let a declaration such as ``identity.*`` block
+        deletes while silently creating no integrity baseline.
+        """
+        return any(fnmatch.fnmatchcase(key, pattern) for pattern in self.immutable_keys)
 
     def decide(self, detector: str, severity: Severity, key: str) -> Action:
         for rule in self.rules:
