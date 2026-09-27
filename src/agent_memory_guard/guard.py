@@ -611,8 +611,25 @@ class MemoryGuard:
         for detector in self._detectors:
             try:
                 result = detector.inspect(key, value, operation=operation)
-            except Exception:  # detectors must never break the agent
-                log.exception("Detector %s raised", getattr(detector, "name", detector))
+            except Exception as exc:  # detectors must never break the agent
+                name = getattr(detector, "name", type(detector).__name__)
+                log.exception("Detector %s raised", name)
+                # The verdict is dropped so a broken detector can't stop the
+                # agent, but that fail-open must not be silent: without an event
+                # here, guard.events looks clean even though this detector never
+                # ran. Emit a low-severity operational event an operator can see.
+                self._emit(
+                    detector=name,
+                    severity=Severity.LOW,
+                    action=Action.ALLOW,
+                    operation=operation,
+                    key=key,
+                    message=f"Detector {name} raised {type(exc).__name__}; verdict skipped",
+                    metadata={
+                        "detector_error": True,
+                        "error_type": type(exc).__name__,
+                    },
+                )
                 continue
             if result.matched:
                 results.append(result)
