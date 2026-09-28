@@ -94,6 +94,8 @@ nav:
   - Architecture:
       - Design: architecture/design.md
       - Threat Model: architecture/threat-model.md
+  - Benchmark:
+      - Memory Systems (AMSB): benchmark/memory-systems.md
   - Contributing: contributing.md
 
 extra:

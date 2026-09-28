@@ -112,6 +112,41 @@ Tested against 55 real-world attack payloads across 4 threat categories:
 python benchmarks/security_benchmark.py   # reproduce locally
 ```
 
+## Agent Memory Security Benchmark (AMSB)
+
+The numbers above measure AMG's own detectors on single writes. The **Agent
+Memory Security Benchmark** is a separate, framework-neutral scoreboard that
+grades **any** memory system on the full poisoning lifecycle — a payload is
+planted, **survives a context reset**, and is read back on a later turn. Any
+system that implements a three-method adapter (`remember` / `recall` /
+`context_reset`) gets a 0–100 resilience score and an SSL-Labs-style letter
+grade, with hard grade ceilings for catastrophic breaches.
+
+AMG authors the benchmark **and submits itself for grading**, measured through
+the identical adapter and corpus as every other entry. The results are not
+curated to flatter it:
+
+| System | Grade | Score | Notes |
+|--------|-------|-------|-------|
+| agent-memory-guard (hardened) | **A** | 93.9 | declared protected keys + persistence detector |
+| agent-memory-guard (strict preset) | **D** | 71.4 | `Policy.strict()` — declared protected keys, no persistence detector |
+| unguarded-dict | **F** | 0.0 | the resilience floor |
+
+The `strict` preset scores **D**: `Policy.strict()` now declares protected keys
+(fixed in 0.3.2, [#90](https://github.com/OWASP/www-project-agent-memory-guard/pull/90))
+so it defends the identity-escalation attacks, but it
+still loads no persistence detector — the delayed-activation attacks survive a
+context reset, and two critical breaches cap the grade at D. A real, honest
+finding about the documented quickstart config, surfaced by AMG's own benchmark:
+the benchmark independently confirms the 0.3.2 fix and still flags the residual
+persistence gap. See
+[`benchmarks/memory-systems/`](benchmarks/memory-systems/) for the full
+leaderboard, methodology, and how to grade a new system.
+
+```bash
+amg-bench --out benchmarks/memory-systems   # reproduce; grade mem0/Letta/Zep with --systems
+```
+
 ## What it does
 
 - **Integrity** — SHA-256 baselines flag out-of-band tampering with immutable keys.
