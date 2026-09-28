@@ -22,7 +22,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "mcp>=1.0.0",
+    # FastMCP is imported from mcp.server.fastmcp, which exists in the 1.x SDK
+    # from 1.2.0 and was removed in 2.0. An uncapped ">=1.0.0" resolves to the
+    # 2.x SDK on a fresh install and the server crashes on import.
+    "mcp>=1.2.0,<2.0.0",
 ]
 
 [project.urls]
