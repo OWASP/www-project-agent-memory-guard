@@ -18,6 +18,10 @@ class Snapshot:
     timestamp: float
     label: str
     data: dict[str, Any]
+    #: SHA-256 of ``data`` at capture time. It is recorded for forensics only:
+    #: nothing recomputes or compares it, so ``rollback()`` restores unverified.
+    #: Do not treat this as an integrity check on the snapshot — snapshots live
+    #: in process memory, so tampering with one already implies code execution.
     digest: str
     metadata: dict[str, Any] = field(default_factory=dict)
 
