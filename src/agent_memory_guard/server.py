@@ -32,6 +32,7 @@ from agent_memory_guard import (
     Action,
     MemoryGuard,
     Policy,
+    PolicyViolation,
     __version__,
 )
 from agent_memory_guard.events import SourceClass
@@ -227,12 +228,17 @@ async def scan_text(req: ScanRequest):
         except ValueError:
             pass
 
-    action = temp_guard.write(
-        req.key,
-        req.text,
-        source=req.source,
-        source_class=source_cls,
-    )
+    try:
+        action = temp_guard.write(
+            req.key,
+            req.text,
+            source=req.source,
+            source_class=source_cls,
+        )
+    except PolicyViolation:
+        # A blocked value is a valid scan result; the block event is already
+        # in temp_guard.events, so report it rather than returning a 500.
+        action = Action.BLOCK
 
     events = [
         {
@@ -266,13 +272,18 @@ async def write_memory(req: WriteRequest):
             pass
 
     initial_events = len(_guard.events)
-    action = _guard.write(
-        req.key,
-        req.value,
-        source=req.source,
-        source_class=source_cls,
-        task_id=req.task_id,
-    )
+    try:
+        action = _guard.write(
+            req.key,
+            req.value,
+            source=req.source,
+            source_class=source_cls,
+            task_id=req.task_id,
+        )
+    except PolicyViolation:
+        # Blocked writes are a normal outcome for this endpoint: nothing was
+        # stored, and the block event is already recorded on the guard.
+        action = Action.BLOCK
 
     new_events = _guard.events[initial_events:]
     events = [

@@ -193,10 +193,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     """Execute the check command."""
-    from agent_memory_guard import MemoryGuard, Policy
+    from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
     guard = MemoryGuard(policy=Policy.strict())
-    action = guard.write("_cli_check", args.text, source="cli")
+    try:
+        action = guard.write("_cli_check", args.text, source="cli")
+    except PolicyViolation:
+        # A blocked value is the expected outcome of a check, not an error:
+        # the guard has already emitted the block event, so report it.
+        action = Action.BLOCK
 
     events = guard.events
     if args.format == "json":
