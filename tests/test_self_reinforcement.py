@@ -4,7 +4,7 @@ Covers the additions called out on microsoft/autogen#7683:
   - source_class travels with every write and lands on emitted events
   - receipt_uri travels with every write and lands on emitted events
   - SelfReinforcementDetector flags agent_authored self-write loops
-  - An EXTERNAL_TOOL / USER_INPUT write decays the cool-down counter
+  - A trusted SYSTEM write decays the cool-down counter by default
   - retire_if removes matching entries and emits a lifecycle event
 """
 from __future__ import annotations
@@ -101,15 +101,15 @@ def test_detector_does_not_flag_dissimilar_writes():
     assert not _drive(d, "k", "zulu yankee xray whiskey victor").matched
 
 
-def test_independent_write_decays_counter():
+def test_trusted_system_write_decays_counter():
     d = SelfReinforcementDetector(max_self_writes=2, similarity_threshold=0.5)
     _drive(d, "k", "fact one stable text")
     _drive(d, "k", "fact one stable text")
-    d.note_independent_write("k")
+    d.note_independent_write("k", SourceClass.SYSTEM)
     third = _drive(d, "k", "fact one stable text")
-    assert not third.matched, "independent write should weaken self-reinforcement"
+    assert not third.matched, "trusted system write should weaken self-reinforcement"
     fourth = _drive(d, "k", "fact one stable text")
-    assert fourth.matched, "independent write must not erase the complete history"
+    assert fourth.matched, "trusted write must not erase the complete history"
 
 
 def test_detector_validation():
@@ -121,16 +121,16 @@ def test_detector_validation():
 
 # ---- End-to-end through MemoryGuard ------------------------------------------
 
-def test_guard_independent_external_tool_write_decays_self_loop():
+def test_guard_trusted_system_write_decays_self_loop():
     g = MemoryGuard(detectors=[SelfReinforcementDetector(
         max_self_writes=2, similarity_threshold=0.5
     )])
     g.write("fact.x", "Atlantis is in the Atlantic", source_class=SourceClass.AGENT_AUTHORED)
     g.write("fact.x", "Atlantis is in the Atlantic", source_class=SourceClass.AGENT_AUTHORED)
-    # Independent corroborating write decays the counter
-    g.write("fact.x", "Atlantis is in the Atlantic", source_class=SourceClass.EXTERNAL_TOOL)
+    # Trusted system corroboration decays the counter by default.
+    g.write("fact.x", "Atlantis is in the Atlantic", source_class=SourceClass.SYSTEM)
     pre = len(g.events)
-    # Next agent_authored write should NOT trigger self-reinforcement
+    # Next agent_authored write should NOT trigger self-reinforcement.
     g.write("fact.x", "Atlantis is in the Atlantic", source_class=SourceClass.AGENT_AUTHORED)
     new = g.events[pre:]
     assert not any(e.detector == "self_reinforcement" for e in new)

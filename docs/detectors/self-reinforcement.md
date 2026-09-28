@@ -13,6 +13,32 @@ Self-reinforcement occurs when an agent's output is written back to its own memo
 
 **OWASP Reference:** ASI-06 (Memory Poisoning — self-reinforcement vector)
 
+## Trusted corroboration
+
+Independent-looking provenance is not automatically trustworthy. `SourceClass` is a caller-supplied provenance label; it does not authenticate a principal, verify source identity, or prove that the content is trustworthy.
+
+For self-reinforcement decay, the secure default trusts only `SourceClass.SYSTEM`. `USER_INPUT`, `EXTERNAL_TOOL`, and `UNKNOWN` do not weaken self-reinforcement history unless the application explicitly opts them in after establishing an appropriate trust boundary.
+
+Configure the detector through the normal `MemoryGuard` initialization path:
+
+```python
+from agent_memory_guard import MemoryGuard, SourceClass
+from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
+
+self_reinforcement = SelfReinforcementDetector(
+    trusted_source_classes={SourceClass.SYSTEM},
+)
+
+guard = MemoryGuard(detectors=[self_reinforcement])
+```
+
+Passing an empty set disables corroboration-based decay entirely:
+
+```python
+self_reinforcement = SelfReinforcementDetector(trusted_source_classes=set())
+guard = MemoryGuard(detectors=[self_reinforcement])
+```
+
 ## Detection Patterns
 
 The detector identifies:
