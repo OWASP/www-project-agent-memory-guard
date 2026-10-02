@@ -5,9 +5,10 @@ Run this to see AMG detect and block memory poisoning in real-time.
 No API keys needed — runs entirely locally.
 """
 
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
-# Initialize with strict policy (blocks prompt injection, PII, size anomalies)
+# Initialize with the strict preset: blocks prompt injection and writes to
+# protected keys, redacts secrets and PII, quarantines oversized values.
 guard = MemoryGuard(policy=Policy.strict())
 
 print("=" * 60)
@@ -57,29 +58,45 @@ poisoned_memories = [
     ),
     (
         "memory.override",
-        "A" * 50000,  # Size anomaly — 50KB payload
+        "A" * 100_000,  # Size anomaly: 100 KB, above the 64 KiB default limit
     ),
 ]
 
-print("🚫 POISONED MEMORIES (should be blocked):")
+print("🚫 POISONED MEMORIES (should be stopped):")
 print("-" * 45)
-blocked_count = 0
+stopped_count = 0
 for key, content in poisoned_memories:
+    display = content[:60] + "..." if len(content) > 60 else content
     try:
-        guard.write(key, content, source="demo")
-        print(f"  ⚠️  MISSED: {key} — this should have been blocked!")
+        action = guard.write(key, content, source="demo")
     except PolicyViolation as exc:
-        blocked_count += 1
-        display = content[:60] + "..." if len(content) > 60 else content
+        stopped_count += 1
         print(f"  🛡️  BLOCKED [{exc.rule}]: {display}")
+        continue
+    # A write can also be stopped without an exception: the strict preset
+    # redacts secrets/PII and quarantines oversized values for review.
+    detector = guard.events[-1].detector if guard.events else "policy"
+    if action == Action.QUARANTINE:
+        stopped_count += 1
+        print(f"  🗄️  QUARANTINED [{detector}]: {key} ({len(content):,} bytes) held for review")
+    elif action == Action.REDACT:
+        stopped_count += 1
+        stored = str(guard.read(key))
+        stored = stored[:60] + "..." if len(stored) > 60 else stored
+        print(f"  ✂️  REDACTED [{detector}]: stored as {stored}")
+    else:
+        print(f"  ⚠️  MISSED: {key} — this should have been stopped!")
 print()
 
 # --- Summary ---
 print("=" * 60)
-print(f"📊 Results: {len(normal_memories)} allowed, {blocked_count}/{len(poisoned_memories)} blocked")
+print(
+    f"📊 Results: {len(normal_memories)} allowed, "
+    f"{stopped_count}/{len(poisoned_memories)} stopped (blocked, quarantined or redacted)"
+)
 print()
-if blocked_count == len(poisoned_memories):
-    print("🎉 All poisoning attempts blocked! Your agent memory is protected.")
+if stopped_count == len(poisoned_memories):
+    print("🎉 All poisoning attempts stopped! Your agent memory is protected.")
 else:
     print("⚠️  Some attacks got through — review your policy configuration.")
 print()
