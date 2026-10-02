@@ -371,12 +371,30 @@ class MemorySecurityScanner:
                         )
                     )
 
-        return findings
+        return _dedupe(findings)
 
 
 # ============================================================================
 # OUTPUT FORMATTERS
 # ============================================================================
+
+
+def _dedupe(findings: list[Finding]) -> list[Finding]:
+    """Keep one finding per rule per line.
+
+    Several patterns of one rule can match the same line (an ``sk-proj-`` key
+    assigned to ``api_key = ...`` matches two secret patterns), which reported
+    the same issue twice. The first, most specific pattern wins.
+    """
+    seen: set[tuple[str, str, int]] = set()
+    unique: list[Finding] = []
+    for finding in findings:
+        marker = (finding.rule_id, finding.file_path, finding.line)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append(finding)
+    return unique
 
 
 def format_text(result: ScanResult) -> str:
