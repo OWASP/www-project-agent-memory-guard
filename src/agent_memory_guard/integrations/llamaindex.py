@@ -5,7 +5,7 @@ screened by a MemoryGuard before it reaches the underlying store.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from agent_memory_guard.events import Action
 from agent_memory_guard.exceptions import PolicyViolation
@@ -69,7 +69,7 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
         if not raw:
             return []
         # Optionally re-screen on read
-        return raw
+        return list(raw)
 
     def add_message(self, key: str, message: ChatMessage, idx: int | None = None) -> None:
         msg_key = f"{self.store_key}.{key}.add"
@@ -90,7 +90,7 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
             self.guard.delete(msg_key)
         except PolicyViolation:
             pass
-        return self._store.delete_messages(key)
+        return cast("list[ChatMessage] | None", self._store.delete_messages(key))
 
     def delete_message(self, key: str, idx: int) -> ChatMessage | None:
         msg_key = f"{self.store_key}.{key}.{idx}"
@@ -107,4 +107,4 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
         return self.delete_message(key, len(msgs) - 1)
 
     def get_keys(self) -> list[str]:
-        return self._store.get_keys()
+        return list(self._store.get_keys())

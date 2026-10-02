@@ -78,6 +78,8 @@ class SelfReinforcementDetector:
         severity: Severity = Severity.MEDIUM,
         trusted_source_classes: Collection[SourceClass] | None = None,
     ) -> None:
+        # Set by MemoryGuard around each write so inspect() can see the provenance.
+        self._pending_source_class: SourceClass = SourceClass.UNKNOWN
         if max_self_writes < 1:
             raise ValueError("max_self_writes must be >= 1")
         if not 0.0 <= similarity_threshold <= 1.0:

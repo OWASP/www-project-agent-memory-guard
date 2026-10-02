@@ -85,7 +85,7 @@ class GuardedMemoryManager(MemoryManager):  # type: ignore[misc, valid-type]
         if screened is None:
             # Blocked or quarantined: skip the database write entirely.
             return getattr(memory, "memory_id", None) or ""
-        return super()._upsert_db_memory(memory=screened)  # type: ignore[misc]
+        return super()._upsert_db_memory(memory=screened)  # type: ignore[misc,no-any-return]
 
     def _screen(self, memory: UserMemory) -> UserMemory | None:
         key = (

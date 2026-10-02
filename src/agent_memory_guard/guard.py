@@ -317,10 +317,12 @@ class MemoryGuard:
             normalised_source_class = _source_type_to_class.get(source_type, SourceClass.UNKNOWN)
 
         # Classification: handle cls parameter
+        target_class: MemoryClass | None
         if cls is not None:
-            target_class = MemoryClass(cls) if not isinstance(cls, MemoryClass) else cls
+            requested = MemoryClass(cls) if not isinstance(cls, MemoryClass) else cls
+            target_class = requested
             existing = self._classification.get(key)
-            if existing is not None and existing != target_class:
+            if existing is not None and existing != requested:
                 self._emit(
                     detector="classification",
                     severity=Severity.HIGH,
@@ -329,9 +331,9 @@ class MemoryGuard:
                     key=key,
                     message=(
                         f"Write would reclassify '{key}': {existing.value} -> "
-                        f"{target_class.value}; use promote() instead"
+                        f"{requested.value}; use promote() instead"
                     ),
-                    metadata={"from": existing.value, "to": target_class.value},
+                    metadata={"from": existing.value, "to": requested.value},
                     source_class=normalised_source_class,
                     receipt_uri=receipt_uri,
                 )
@@ -339,7 +341,7 @@ class MemoryGuard:
                     f"Cannot reclassify '{key}' on write; use promote()",
                     key=key,
                     source_class=existing.value,
-                    target_class=target_class.value,
+                    target_class=requested.value,
                 )
         else:
             target_class = self._classification.get(key)
