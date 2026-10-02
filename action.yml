@@ -229,7 +229,7 @@ runs:
 
     - name: Upload SARIF to the Security tab
       if: always() && inputs.upload-sarif == 'true' && inputs.output-format == 'sarif'
-      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v3
+      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
       with:
         sarif_file: ${{ steps.scan.outputs.sarif-path }}
       continue-on-error: true
