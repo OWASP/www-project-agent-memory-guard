@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+from typing import Any, Optional
 
 try:
     from fastapi import FastAPI
@@ -35,6 +35,7 @@ from agent_memory_guard import (
     __version__,
 )
 from agent_memory_guard.events import SourceClass
+from agent_memory_guard.exceptions import IntegrityError, PolicyViolation
 
 # ============================================================================
 # APP SETUP
@@ -111,7 +112,9 @@ class ScanRequest(BaseModel):
     text: str = Field(..., description="Text content to scan for threats")
     key: str = Field(default="_scan", description="Memory key context (optional)")
     source: str = Field(default="api", description="Source identifier")
-    source_class: str | None = Field(
+    # Optional[...] rather than `X | None`: pydantic evaluates these annotations
+    # at runtime, and the union operator does not exist on Python 3.9.
+    source_class: Optional[str] = Field(  # noqa: UP045
         default=None,
         description="Source class: agent_authored, external_tool, user_input",
     )
@@ -132,8 +135,8 @@ class WriteRequest(BaseModel):
     key: str = Field(..., description="Memory key to write")
     value: Any = Field(..., description="Value to store")
     source: str = Field(default="api", description="Source identifier")
-    source_class: str | None = Field(default=None, description="Source class")
-    task_id: str | None = Field(default=None, description="Task context ID")
+    source_class: Optional[str] = Field(default=None, description="Source class")  # noqa: UP045
+    task_id: Optional[str] = Field(default=None, description="Task context ID")  # noqa: UP045
 
 
 class WriteResponse(BaseModel):
@@ -157,6 +160,7 @@ class ReadResponse(BaseModel):
     key: str
     value: Any
     found: bool
+    blocked: bool = Field(default=False, description="True when policy or integrity checks withheld the value")
     events: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -227,12 +231,17 @@ async def scan_text(req: ScanRequest):
         except ValueError:
             pass
 
-    action = temp_guard.write(
-        req.key,
-        req.text,
-        source=req.source,
-        source_class=source_cls,
-    )
+    try:
+        action = temp_guard.write(
+            req.key,
+            req.text,
+            source=req.source,
+            source_class=source_cls,
+        )
+    except PolicyViolation:
+        # A blocking verdict is the answer this endpoint exists to give; the
+        # guard has already recorded the event. Report it, don't 500.
+        action = Action.BLOCK
 
     events = [
         {
@@ -266,13 +275,16 @@ async def write_memory(req: WriteRequest):
             pass
 
     initial_events = len(_guard.events)
-    action = _guard.write(
-        req.key,
-        req.value,
-        source=req.source,
-        source_class=source_cls,
-        task_id=req.task_id,
-    )
+    try:
+        action = _guard.write(
+            req.key,
+            req.value,
+            source=req.source,
+            source_class=source_cls,
+            task_id=req.task_id,
+        )
+    except PolicyViolation:
+        action = Action.BLOCK
 
     new_events = _guard.events[initial_events:]
     events = [
@@ -297,7 +309,14 @@ async def write_memory(req: WriteRequest):
 async def read_memory(req: ReadRequest):
     """Read a value from the guarded memory store."""
     initial_events = len(_guard.events)
-    value = _guard.read(req.key)
+    blocked = False
+    try:
+        value = _guard.read(req.key)
+    except (PolicyViolation, IntegrityError):
+        # Withheld by policy or failed integrity verification; the guard has
+        # emitted the event, so return it with no value instead of a 500.
+        value = None
+        blocked = True
 
     new_events = _guard.events[initial_events:]
     events = [
@@ -314,12 +333,13 @@ async def read_memory(req: ReadRequest):
         key=req.key,
         value=value,
         found=value is not None,
+        blocked=blocked,
         events=events,
     )
 
 
 @app.get("/events")
-async def list_events(limit: int = 50, severity: str | None = None):
+async def list_events(limit: int = 50, severity: Optional[str] = None):  # noqa: UP045
     """List recent security events."""
     events = _guard.events
     if severity:
