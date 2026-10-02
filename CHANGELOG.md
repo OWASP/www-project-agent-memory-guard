@@ -44,6 +44,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The demo now reports each outcome as it happens; the prompt-injection
   detector recognises header-style `SYSTEM OVERRIDE:` directives (prose that
   mentions a system override is not flagged).
+- **The LlamaIndex chat store was not a LlamaIndex chat store.** The adapter imported
+  `BaseChatStore` from a module that does not exist in llama-index-core 0.10+ and
+  silently fell back to `object`, so `ChatMemoryBuffer.from_defaults(chat_store=...)`
+  rejected it. It now subclasses the real base, and each message gets its own guard
+  key, so a long, fast conversation is no longer quarantined as rapid change.
 - Type-checking errors reported by mypy in `guard.py`, the LlamaIndex and Agno
   integrations, and the self-reinforcement detector.
 
