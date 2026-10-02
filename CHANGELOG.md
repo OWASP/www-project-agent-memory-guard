@@ -100,6 +100,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Documentation
 
 - `Snapshot.digest` is documented as not verified on rollback. ([#139])
+- The GitHub Action docs pointed at `OWASP/www-project-agent-memory-guard/action@main`,
+  which does not exist (`action.yml` is at the repository root). They now use
+  `OWASP/www-project-agent-memory-guard@v0.3.3`.
 - The README's recognition section states that the mentions are not endorsements.
   Thanks [@GhostCoder6969](https://github.com/GhostCoder6969). ([#141], [#140])
 
