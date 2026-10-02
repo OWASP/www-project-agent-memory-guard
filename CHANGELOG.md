@@ -25,6 +25,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   adapters for mem0/Letta/Zep. AMG is graded arm's-length as one system among others.
   Committed results under `benchmarks/memory-systems/`.
 
+### Fixed
+
+- **`amg check` crashed on the input it exists to flag.** Any text the strict
+  policy blocks raised a `PolicyViolation` traceback. The command now reports
+  the block (text and JSON) and exits 1.
+- **`amg scan <file>` scanned nothing.** A file path was walked as a directory,
+  matched no files, and reported a clean scan with exit 0. Files are now scanned
+  directly. One secret matched by two patterns on the same line is reported once.
+- **REST API returned HTTP 500 for blocked content.** `/scan` and `/write` now
+  return `action: "block"` (with `safe`/`stored` false) and the events; `/read`
+  returns `blocked: true` for policy blocks and integrity failures. The server
+  module also imports on Python 3.9 again (runtime-evaluated `X | None`
+  annotations replaced with `Optional[X]`).
+- **`demo.py` under-reported its own results.** Redacted and quarantined writes
+  were counted as misses, the "size anomaly" payload (50 KB) sat under the
+  64 KiB default limit, and the "SYSTEM OVERRIDE:" payload matched no detector.
+  The demo now reports each outcome as it happens; the prompt-injection
+  detector recognises header-style `SYSTEM OVERRIDE:` directives (prose that
+  mentions a system override is not flagged).
+- Type-checking errors reported by mypy in `guard.py`, the LlamaIndex and Agno
+  integrations, and the self-reinforcement detector.
+
+### Changed
+
+- The `test` extra now installs FastAPI and pydantic so CI exercises the API server.
+
 ## [0.3.2] - 2026-09-09
 
 ### Fixed
