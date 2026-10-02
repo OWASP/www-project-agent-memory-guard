@@ -1,8 +1,8 @@
 """OpenAI Agents SDK — screen tool outputs before they enter session memory.
 
-This is a runnable, dependency-light slice of issue #8: it does **not** vendor
-the full SDK adapter (see open PR #22 for ``GuardedAgentContext`` /
-``GuardedToolOutput`` / ``GuardedHandoff``). Instead it shows the pattern
+This is a runnable, dependency-light slice of issue #8: it does **not** need
+the SDK (the drop-in ``GuardedAgentContext`` / ``GuardedToolOutput`` /
+``GuardedHandoff`` adapters live in ``agent_memory_guard.integrations.openai_agents``). Instead it shows the pattern
 maintainers already document — wrap session memory with ``MemoryGuard`` — and
 adds the HITL-shaped control that Title-B agent-ownership talks need:
 
@@ -39,8 +39,8 @@ class GuardedSessionMemory:
     """Session scratchpad whose writes are screened by Agent Memory Guard.
 
     Mirrors how OpenAI Agents SDK apps typically keep per-run state (a dict /
-    context object). Full SDK wrapping lands via PR #22; this helper is the
-    mergeable pattern that works against current ``main`` today.
+    context object). For full SDK wrapping use
+    ``agent_memory_guard.integrations.openai_agents``; this helper shows the pattern.
     """
 
     guard: MemoryGuard
@@ -97,10 +97,7 @@ def run_demo() -> dict[str, Any]:
         "clean_committed": clean_ok,
         "poison_committed": poison_ok,
         "recalled_clean": memory.recall("web_search") if clean_ok else None,
-        # After poison attempt the scratchpad still holds the last good value
-        # only if poison was blocked *and* we keyed by tool name — demo uses
-        # same key, so a blocked write leaves prior value untouched only when
-        # we don't overwrite. remember_tool_output returns early on block, so:
+        # A blocked write leaves the last good value in place.
         "scratch_after": memory.recall("web_search"),
         "hitl_queue": memory.pending_hitl(),
     }

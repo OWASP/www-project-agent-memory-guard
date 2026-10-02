@@ -198,7 +198,8 @@ Optional: pass `policy=Policy.strict()` or `on_violation="warn"|"strip"|"block"`
 
 Screen tool outputs before they enter session memory. Runnable example:
 [`examples/openai_agents_memory_guard.py`](examples/openai_agents_memory_guard.py)
-(HITL queue on block). Full SDK adapters: issue [#8](https://github.com/OWASP/www-project-agent-memory-guard/issues/8) / PR [#22](https://github.com/OWASP/www-project-agent-memory-guard/pull/22).
+(HITL queue on block). Drop-in SDK adapters (`GuardedAgentContext`, `GuardedToolOutput`,
+`GuardedHandoff`) ship in `agent_memory_guard.integrations.openai_agents`.
 
 ```python
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
@@ -392,7 +393,9 @@ See [AUTHORS](AUTHORS) for details.
 - Referenced in the MITRE ATLAS "Memory Hardening" mitigation as an open-source implementation of memory-hardening controls.
 - Featured by Help Net Security, "OWASP Agent Memory Guard: Stop AI agents from being weaponized through their own memory" (June 2026).
 
-These mentions are descriptive only. This project is not OWASP-certified and not MITRE-approved, the ATLAS mitigation entry is a YAML listing.
+These mentions are descriptive, not endorsements. OWASP Incubator status is not a certification,
+and MITRE has not approved or endorsed this project; the ATLAS Memory Hardening entry lists it
+among example tools.
 
 ## How to cite
 

@@ -73,7 +73,8 @@ they enter session memory.
 Runnable slice (no SDK install required):
 `examples/openai_agents_memory_guard.py` — screens tool outputs, queues blocked
 writes for HITL review. Full drop-in adapters (`GuardedAgentContext`,
-`GuardedToolOutput`, `GuardedHandoff`) are tracked in issue #8 / PR #22.
+`GuardedToolOutput`, `GuardedHandoff`) ship in
+`agent_memory_guard.integrations.openai_agents`.
 
 ```python
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
@@ -134,8 +135,8 @@ returning the tool output into the agent loop.
 
 A dedicated integration package also lives at
 `integrations/autogen-agent-memory-guard/` (PyPI-style sibling of the LangChain
-middleware package). In-tree `integrations/autogen.py` drop-ins are tracked with
-issue #8 / PR #22 alongside the OpenAI Agents adapters.
+middleware package). In-tree drop-ins (`GuardedAutoGenAgent`, `GuardedGroupChatManager`,
+`install_guard`) ship in `agent_memory_guard.integrations.autogen`.
 
 ---
 
