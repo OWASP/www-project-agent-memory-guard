@@ -103,6 +103,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The GitHub Action docs pointed at `OWASP/www-project-agent-memory-guard/action@main`,
   which does not exist (`action.yml` is at the repository root). They now use
   `OWASP/www-project-agent-memory-guard@v0.3.3`.
+- The configuration guide documented `Policy.from_yaml()` (which does not exist), a
+  YAML schema the loader does not read, unused environment variables and a
+  `custom_patterns` argument. It now documents `load_policy`, the real policy
+  schema and rule semantics, adding detectors, and the server settings.
 - The README's recognition section states that the mentions are not endorsements.
   Thanks [@GhostCoder6969](https://github.com/GhostCoder6969). ([#141], [#140])
 
