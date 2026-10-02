@@ -11,7 +11,7 @@ pip install agent-memory-guard[llamaindex]
 ## Usage
 
 ```python
-from llama_index.core.chat_store import SimpleChatStore
+from llama_index.core.storage.chat_store import SimpleChatStore
 from agent_memory_guard import MemoryGuard, Policy
 from agent_memory_guard.integrations.llamaindex import GuardedChatStore
 
