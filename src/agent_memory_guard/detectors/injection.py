@@ -89,6 +89,24 @@ nesting-depth pad into a silent bypass of every content detector.
 TRUNCATION_MARKER = "<amg:max-depth>"
 
 
+def exceeds_max_depth(value: Any, limit: int = MAX_STRINGIFY_DEPTH) -> bool:
+    """Return True when ``value`` holds containers deeper than ``_stringify`` reads.
+
+    ``_stringify`` replaces anything below ``limit`` with ``TRUNCATION_MARKER``,
+    so no content detector ever sees it. Iterative and depth-first, so it stops
+    at the first over-deep container and cannot itself hit the recursion limit.
+    """
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, (list, tuple, set, dict)):
+            if depth >= limit:
+                return True
+            children = item.values() if isinstance(item, dict) else item
+            stack.extend((child, depth + 1) for child in children)
+    return False
+
+
 def _stringify(value: Any, _depth: int = 0) -> str:
     if value is None:
         return ""
