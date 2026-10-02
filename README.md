@@ -227,49 +227,55 @@ def recall(key: str) -> str | None:
 ### AutoGen
 
 ```python
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
 guard = MemoryGuard(policy=Policy.strict())
 
 def guarded_append(history: list[dict], message: dict) -> None:
+    key = f"autogen.msg.{len(history)}"
     try:
-        guard.write(f"autogen.msg.{len(history)}", message["content"],
-                    source=message.get("role", "agent"))
+        action = guard.write(key, message["content"], source=message.get("role", "agent"))
     except PolicyViolation as exc:
         print("blocked:", exc)
         return
-    history.append(message)
+    if action == Action.QUARANTINE:
+        return  # held in guard.quarantine for review
+    history.append({**message, "content": guard.read(key)})  # redacted if needed
 ```
 
 ### mem0
 
 ```python
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
 guard = MemoryGuard(policy=Policy.strict())
 
 def safe_add(mem0_client, *, user_id: str, content: str, key: str) -> bool:
     try:
-        guard.write(key, content, source="mem0")
+        action = guard.write(key, content, source="mem0")
     except PolicyViolation:
         return False
-    mem0_client.add(content, user_id=user_id)
+    if action == Action.QUARANTINE:
+        return False  # held in guard.quarantine for review
+    mem0_client.add(guard.read(key), user_id=user_id)  # redacted if needed
     return True
 ```
 
 ### CrewAI
 
 ```python
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
 guard = MemoryGuard(policy=Policy.strict())
 
 def guarded_memory_callback(key: str, value: str, agent_name: str) -> str:
     try:
-        guard.write(key, value, source=f"crewai.{agent_name}")
+        action = guard.write(key, value, source=f"crewai.{agent_name}")
     except PolicyViolation as exc:
         return f"[BLOCKED] {exc}"
-    return value
+    if action == Action.QUARANTINE:
+        return "[QUARANTINED] held for review"
+    return guard.read(key)  # redacted if needed
 ```
 
 ## YAML policy

@@ -107,6 +107,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   YAML schema the loader does not read, unused environment variables and a
   `custom_patterns` argument. It now documents `load_policy`, the real policy
   schema and rule semantics, adding detectors, and the server settings.
+- The README's AutoGen, mem0 and CrewAI snippets passed the original content on after
+  a write, so a value the strict policy had redacted still reached the framework in
+  clear, and a quarantined value was stored anyway. They now pass on the guard's
+  stored (redacted) value and skip quarantined writes.
 - The README's recognition section states that the mentions are not endorsements.
   Thanks [@GhostCoder6969](https://github.com/GhostCoder6969). ([#141], [#140])
 
