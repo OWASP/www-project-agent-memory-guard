@@ -16,7 +16,11 @@ from agent_memory_guard.detectors.anomaly import (
 )
 from agent_memory_guard.detectors.base import DetectionResult, Detector
 from agent_memory_guard.detectors.cross_task import CrossTaskContaminationDetector
-from agent_memory_guard.detectors.injection import PromptInjectionDetector
+from agent_memory_guard.detectors.injection import (
+    MAX_STRINGIFY_DEPTH,
+    PromptInjectionDetector,
+    exceeds_max_depth,
+)
 from agent_memory_guard.detectors.leakage import SensitiveDataDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
 from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
@@ -636,6 +640,24 @@ class MemoryGuard:
                 continue
             if result.matched:
                 results.append(result)
+        # Content below MAX_STRINGIFY_DEPTH is truncated before any detector reads
+        # it, so a payload nested deeper than that would otherwise be allowed with
+        # no event. Content that could not be inspected is a finding, not silence:
+        # report it as a size anomaly so the policy decides (strict quarantines;
+        # permissive allows it but records the event).
+        if exceeds_max_depth(value):
+            results.append(
+                DetectionResult(
+                    detector="size_anomaly",
+                    matched=True,
+                    severity=Severity.HIGH,
+                    message=(
+                        f"Value for '{key}' nests deeper than {MAX_STRINGIFY_DEPTH} levels; "
+                        "content below that depth could not be inspected"
+                    ),
+                    metadata={"max_depth": MAX_STRINGIFY_DEPTH, "uninspected_content": True},
+                )
+            )
         return results
 
     def _decide(self, verdicts: list[DetectionResult], *, key: str) -> Action:
