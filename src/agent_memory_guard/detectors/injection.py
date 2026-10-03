@@ -18,6 +18,9 @@ DEFAULT_INJECTION_PATTERNS: tuple[str, ...] = (
     r"\b(?:reveal|print|leak|dump|exfiltrate)\s+(?:the\s+)?(?:system\s+)?(?:prompt|instructions|secrets|api[_\s-]?key)",
     r"\bnew (?:instructions|directive|persona)\s*[:\-]",
     r"\boverride\s+(?:safety|security|guardrails|policy)",
+    # Header-style directive ("SYSTEM OVERRIDE: ...") - anchored on the colon or
+    # dash so prose such as "the thermostat's system override switch" is not hit.
+    r"\bsystem\s+override\s*[:\-]",
 )
 
 

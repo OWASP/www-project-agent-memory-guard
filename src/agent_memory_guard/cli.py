@@ -135,7 +135,12 @@ def cmd_scan(args: argparse.Namespace) -> int:
         exclude_patterns=exclude_patterns,
     )
 
-    result = scanner.scan_directory(scan_path)
+    # A file path must be scanned directly: walking it as a directory matches
+    # no files, which would report a clean scan (exit 0) for code never read.
+    if scan_path.is_file():
+        result = scanner.scan_file(scan_path)
+    else:
+        result = scanner.scan_directory(scan_path)
 
     # Format output
     from agent_memory_guard.scanner import format_json, format_sarif, format_text
@@ -199,10 +204,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     """Execute the check command."""
-    from agent_memory_guard import MemoryGuard, Policy
+    from agent_memory_guard import Action, MemoryGuard, Policy
+    from agent_memory_guard.exceptions import PolicyViolation
 
     guard = MemoryGuard(policy=Policy.strict())
-    action = guard.write("_cli_check", args.text, source="cli")
+    try:
+        action = guard.write("_cli_check", args.text, source="cli")
+    except PolicyViolation:
+        # The guard records the BLOCK event before raising. Report it like any
+        # other verdict instead of crashing on exactly the input this command
+        # exists to flag.
+        action = Action.BLOCK
 
     events = guard.events
     if args.format == "json":
