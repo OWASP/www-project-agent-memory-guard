@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: OWASP/www-project-agent-memory-guard/action@main
+      - uses: OWASP/www-project-agent-memory-guard@v0.3.3
         with:
           scan-path: "."
           min-severity: "medium"
@@ -53,7 +53,7 @@ jobs:
 ### Block PRs with Critical Findings
 
 ```yaml
-- uses: OWASP/www-project-agent-memory-guard/action@main
+- uses: OWASP/www-project-agent-memory-guard@v0.3.3
   id: amg
   with:
     min-severity: "critical"
@@ -75,7 +75,7 @@ jobs:
 ### Scan Multiple Languages
 
 ```yaml
-- uses: OWASP/www-project-agent-memory-guard/action@main
+- uses: OWASP/www-project-agent-memory-guard@v0.3.3
   with:
     include-patterns: "**/*.py,**/*.js,**/*.ts"
     exclude-patterns: "**/node_modules/**,**/test*/**"
@@ -84,7 +84,7 @@ jobs:
 ### JSON Report as Artifact
 
 ```yaml
-- uses: OWASP/www-project-agent-memory-guard/action@main
+- uses: OWASP/www-project-agent-memory-guard@v0.3.3
   with:
     output-format: "json"
     upload-sarif: "false"

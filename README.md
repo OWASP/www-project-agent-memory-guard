@@ -198,7 +198,8 @@ Optional: pass `policy=Policy.strict()` or `on_violation="warn"|"strip"|"block"`
 
 Screen tool outputs before they enter session memory. Runnable example:
 [`examples/openai_agents_memory_guard.py`](examples/openai_agents_memory_guard.py)
-(HITL queue on block). Full SDK adapters: issue [#8](https://github.com/OWASP/www-project-agent-memory-guard/issues/8) / PR [#22](https://github.com/OWASP/www-project-agent-memory-guard/pull/22).
+(HITL queue on block). Drop-in SDK adapters (`GuardedAgentContext`, `GuardedToolOutput`,
+`GuardedHandoff`) ship in `agent_memory_guard.integrations.openai_agents`.
 
 ```python
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
@@ -226,49 +227,55 @@ def recall(key: str) -> str | None:
 ### AutoGen
 
 ```python
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
 guard = MemoryGuard(policy=Policy.strict())
 
 def guarded_append(history: list[dict], message: dict) -> None:
+    key = f"autogen.msg.{len(history)}"
     try:
-        guard.write(f"autogen.msg.{len(history)}", message["content"],
-                    source=message.get("role", "agent"))
+        action = guard.write(key, message["content"], source=message.get("role", "agent"))
     except PolicyViolation as exc:
         print("blocked:", exc)
         return
-    history.append(message)
+    if action == Action.QUARANTINE:
+        return  # held in guard.quarantine for review
+    history.append({**message, "content": guard.read(key)})  # redacted if needed
 ```
 
 ### mem0
 
 ```python
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
 guard = MemoryGuard(policy=Policy.strict())
 
 def safe_add(mem0_client, *, user_id: str, content: str, key: str) -> bool:
     try:
-        guard.write(key, content, source="mem0")
+        action = guard.write(key, content, source="mem0")
     except PolicyViolation:
         return False
-    mem0_client.add(content, user_id=user_id)
+    if action == Action.QUARANTINE:
+        return False  # held in guard.quarantine for review
+    mem0_client.add(guard.read(key), user_id=user_id)  # redacted if needed
     return True
 ```
 
 ### CrewAI
 
 ```python
-from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import Action, MemoryGuard, Policy, PolicyViolation
 
 guard = MemoryGuard(policy=Policy.strict())
 
 def guarded_memory_callback(key: str, value: str, agent_name: str) -> str:
     try:
-        guard.write(key, value, source=f"crewai.{agent_name}")
+        action = guard.write(key, value, source=f"crewai.{agent_name}")
     except PolicyViolation as exc:
         return f"[BLOCKED] {exc}"
-    return value
+    if action == Action.QUARANTINE:
+        return "[QUARANTINED] held for review"
+    return guard.read(key)  # redacted if needed
 ```
 
 ## YAML policy
@@ -392,7 +399,9 @@ See [AUTHORS](AUTHORS) for details.
 - Referenced in the MITRE ATLAS "Memory Hardening" mitigation as an open-source implementation of memory-hardening controls.
 - Featured by Help Net Security, "OWASP Agent Memory Guard: Stop AI agents from being weaponized through their own memory" (June 2026).
 
-These mentions are descriptive only. This project is not OWASP-certified and not MITRE-approved, the ATLAS mitigation entry is a YAML listing.
+These mentions are descriptive, not endorsements. OWASP Incubator status is not a certification,
+and MITRE has not approved or endorsed this project; the ATLAS Memory Hardening entry lists it
+among example tools.
 
 ## How to cite
 

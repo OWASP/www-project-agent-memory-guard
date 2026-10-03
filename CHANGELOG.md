@@ -14,6 +14,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-02
+
+### Security
+
+- **A nesting pad disabled every content detector.** `_stringify` walked nested
+  values with no depth bound, so a value nested a few hundred levels deep raised
+  `RecursionError` inside the detectors; the guard swallowed the errors and allowed
+  the write with no events. The walk is now bounded at 50 levels. Reported and fixed
+  by [@Yeagerist0](https://github.com/Yeagerist0). ([#135])
+- **Content nested below that bound was still allowed silently.** Anything deeper
+  than 50 levels was replaced by a marker that no detector reads, so a payload nested
+  51 or more levels deep was written with no event. Such values are now reported as a
+  `size_anomaly` finding: `Policy.strict()` quarantines them and permissive policies
+  record the event. Found while preparing this release.
+- **Glob `immutable_keys` created no integrity baseline.** `immutable_keys=("identity.*",)`
+  blocked deletes but never baselined the matching keys, so out-of-band tampering went
+  undetected. Baselines now use the same glob matching. Reported and fixed by
+  [@Yeagerist0](https://github.com/Yeagerist0). ([#136])
+- **A failing detector was invisible.** When a detector raised, its verdict was dropped
+  with no event. The guard now emits a low-severity `SecurityEvent` carrying
+  `detector_error` metadata, so operators can alert on it. ([#138], [#137])
+- **GitHub Action inputs could be substituted into the run script.** The composite
+  action now passes inputs through `env:`. Thanks [@avp9-nexus](https://github.com/avp9-nexus). ([#122])
+
 ### Added
 
 - **Agent Memory Security Benchmark (AMSB)** — a framework-neutral benchmark and
@@ -23,7 +47,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   SSL-Labs-style scoring with grade ceilings, report renderer), an `amg-bench` CLI,
   offline baselines (unguarded dict + two AMG configurations), and opt-in reference
   adapters for mem0/Letta/Zep. AMG is graded arm's-length as one system among others.
-  Committed results under `benchmarks/memory-systems/`.
+  Committed results under `benchmarks/memory-systems/`. ([#88])
+- **AutoGen and OpenAI Agents SDK adapters**: `GuardedAutoGenAgent`,
+  `GuardedGroupChatManager` and `install_guard`; `GuardedAgentContext`,
+  `GuardedToolOutput` and `GuardedHandoff`. Thanks [@hesam-oxe](https://github.com/hesam-oxe). ([#22])
+- **Agno integration**: `GuardedMemoryManager`. ([#55])
+- A runnable OpenAI Agents example that screens tool outputs and queues blocked
+  writes for human review. Thanks [@b-pm](https://github.com/b-pm). ([#126])
+- A trusted-publishing workflow for `amg-mcp-server` (dry run by default). The
+  server's `mcp` dependency is capped below 2.0, whose SDK removed `FastMCP`. ([#100])
 
 ### Fixed
 
@@ -51,10 +83,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   key, so a long, fast conversation is no longer quarantined as rapid change.
 - Type-checking errors reported by mypy in `guard.py`, the LlamaIndex and Agno
   integrations, and the self-reinforcement detector.
+- `amg serve --policy` now reaches the running server; it always used `strict`. ([#147])
+- Benchmark plots work with Matplotlib 3.11, and reports carry the installed version
+  instead of a hard-coded one. ([#148])
+- Self-reinforcement decay is trust-aware: only writes from trusted provenance classes
+  decay a key's history. Thanks [@JavierQuinan](https://github.com/JavierQuinan). ([#124])
 
 ### Changed
 
 - The `test` extra now installs FastAPI and pydantic so CI exercises the API server.
+- Every third-party action in CI and in the composite action is pinned to a commit
+  SHA. Thanks [@rksharma-owg](https://github.com/rksharma-owg). ([#54])
+- Bumped `actions/setup-python` to v7.0.0, `actions/upload-artifact` to v7.0.1 and
+  `github/codeql-action/upload-sarif` to v4.38.2. ([#144], [#145], [#146])
+
+### Documentation
+
+- `Snapshot.digest` is documented as not verified on rollback. ([#139])
+- The GitHub Action docs pointed at `OWASP/www-project-agent-memory-guard/action@main`,
+  which does not exist (`action.yml` is at the repository root). They now use
+  `OWASP/www-project-agent-memory-guard@v0.3.3`.
+- The configuration guide documented `Policy.from_yaml()` (which does not exist), a
+  YAML schema the loader does not read, unused environment variables and a
+  `custom_patterns` argument. It now documents `load_policy`, the real policy
+  schema and rule semantics, adding detectors, and the server settings.
+- The README's AutoGen, mem0 and CrewAI snippets passed the original content on after
+  a write, so a value the strict policy had redacted still reached the framework in
+  clear, and a quarantined value was stored anyway. They now pass on the guard's
+  stored (redacted) value and skip quarantined writes.
+- The LlamaIndex guide imported `SimpleChatStore` from `llama_index.core.chat_store`,
+  which does not exist; it is `llama_index.core.storage.chat_store`.
+- The README's recognition section states that the mentions are not endorsements.
+  Thanks [@GhostCoder6969](https://github.com/GhostCoder6969). ([#141], [#140])
 
 ## [0.3.2] - 2026-09-09
 
@@ -179,6 +239,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial project structure and OWASP proposal
 - Basic memory guard concept and architecture design
 
+[#135]: https://github.com/OWASP/www-project-agent-memory-guard/pull/135
+[#136]: https://github.com/OWASP/www-project-agent-memory-guard/pull/136
+[#137]: https://github.com/OWASP/www-project-agent-memory-guard/issues/137
+[#138]: https://github.com/OWASP/www-project-agent-memory-guard/pull/138
+[#139]: https://github.com/OWASP/www-project-agent-memory-guard/pull/139
+[#122]: https://github.com/OWASP/www-project-agent-memory-guard/pull/122
+[#88]: https://github.com/OWASP/www-project-agent-memory-guard/pull/88
+[#22]: https://github.com/OWASP/www-project-agent-memory-guard/pull/22
+[#55]: https://github.com/OWASP/www-project-agent-memory-guard/pull/55
+[#126]: https://github.com/OWASP/www-project-agent-memory-guard/pull/126
+[#100]: https://github.com/OWASP/www-project-agent-memory-guard/pull/100
+[#147]: https://github.com/OWASP/www-project-agent-memory-guard/pull/147
+[#148]: https://github.com/OWASP/www-project-agent-memory-guard/pull/148
+[#124]: https://github.com/OWASP/www-project-agent-memory-guard/pull/124
+[#54]: https://github.com/OWASP/www-project-agent-memory-guard/pull/54
+[#144]: https://github.com/OWASP/www-project-agent-memory-guard/pull/144
+[#145]: https://github.com/OWASP/www-project-agent-memory-guard/pull/145
+[#146]: https://github.com/OWASP/www-project-agent-memory-guard/pull/146
+[#141]: https://github.com/OWASP/www-project-agent-memory-guard/pull/141
+[#140]: https://github.com/OWASP/www-project-agent-memory-guard/issues/140
 [#120]: https://github.com/OWASP/www-project-agent-memory-guard/pull/120
 [#118]: https://github.com/OWASP/www-project-agent-memory-guard/pull/118
 [#109]: https://github.com/OWASP/www-project-agent-memory-guard/pull/109
@@ -189,6 +269,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [#87]: https://github.com/OWASP/www-project-agent-memory-guard/issues/87
 [#93]: https://github.com/OWASP/www-project-agent-memory-guard/pull/93
 [#94]: https://github.com/OWASP/www-project-agent-memory-guard/pull/94
+[0.3.3]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.2.2...v0.3.0
