@@ -378,6 +378,8 @@ See [AUTHORS](AUTHORS) for details.
 - Referenced in the MITRE ATLAS "Memory Hardening" mitigation as an open-source implementation of memory-hardening controls.
 - Featured by Help Net Security, "OWASP Agent Memory Guard: Stop AI agents from being weaponized through their own memory" (June 2026).
 
+These mentions are descriptive only. This project is not OWASP-certified and not MITRE-approved, the ATLAS mitigation entry is a YAML listing.
+
 ## How to cite
 
 Use GitHub's "Cite this repository" button (powered by [CITATION.cff](CITATION.cff)), or:
