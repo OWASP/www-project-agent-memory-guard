@@ -32,6 +32,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
+from agent_memory_guard import __version__ as amg_version
 from agent_memory_guard.detectors import (
     MemoryPersistenceInjectionDetector,
     PromptInjectionDetector,
@@ -517,8 +518,8 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
     ax1.legend()
 
     # Box plot comparison
-    bp = ax2.boxplot([attack_latencies, benign_latencies], labels=["Attack Payloads", "Benign Operations"],
-                     patch_artist=True, widths=0.5)
+    bp = ax2.boxplot([attack_latencies, benign_latencies], patch_artist=True, widths=0.5)
+    ax2.set_xticks([1, 2], ["Attack Payloads", "Benign Operations"])
     bp["boxes"][0].set_facecolor(COLORS["danger"])
     bp["boxes"][0].set_alpha(0.3)
     bp["boxes"][1].set_facecolor(COLORS["success"])
@@ -534,7 +535,7 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
     # ---- 5. Summary Dashboard (combined) ----
     fig = plt.figure(figsize=(16, 10))
     fig.suptitle("OWASP Agent Memory Guard — Security Benchmark Results\n"
-                 f"v0.2.2 | {result.total} Test Cases | {len(result.detector_names)} Detectors",
+                 f"v{amg_version} | {result.total} Test Cases | {len(result.detector_names)} Detectors",
                  fontsize=15, fontweight="bold", y=0.98)
 
     # Top row: Scorecard metrics
@@ -609,16 +610,16 @@ def generate_report(
 
     report = f"""# OWASP Agent Memory Guard — Security Benchmark Report
 
-**Version**: 0.2.2  
-**Test Cases**: {result.total}  
-**Date**: {time.strftime("%Y-%m-%d")}  
+**Version**: {amg_version}
+**Test Cases**: {result.total}
+**Date**: {time.strftime("%Y-%m-%d")}
 **Python**: {sys.version.split()[0]}
 
 ---
 
 ## Executive Summary
 
-Agent Memory Guard achieves **{result.recall:.0%} detection rate** (recall) with **{result.precision:.0%} precision** across {result.total} test cases spanning {len(result.attack_categories)} attack categories, while adding only **{np.median(latencies):.0f} µs median latency** per memory operation.
+With this custom benchmark policy and opt-in detector configuration, Agent Memory Guard detected **{result.recall:.0%}** of attack cases with **{result.precision:.0%} precision** among {result.total} project-authored synthetic cases; median measured write latency was **{np.median(latencies):.0f} µs** in this local run. These figures do not establish independent validation, default-install performance, or production accuracy.
 
 | Metric | Value |
 |--------|-------|
@@ -706,7 +707,7 @@ Agent Memory Guard achieves **{result.recall:.0%} detection rate** (recall) with
 | **P99 latency** | {np.percentile(latencies, 99):.0f} µs |
 | **Max latency** | {np.max(latencies):.0f} µs |
 
-The overhead is negligible for typical agent operations (< 1ms per read/write).
+This local, synthetic measurement is not a general latency guarantee for production agent operations.
 
 ---
 
@@ -741,6 +742,7 @@ The overhead is negligible for typical agent operations (< 1ms per read/write).
 ```bash
 cd /path/to/www-project-agent-memory-guard
 pip install -e ".[dev]"
+pip install matplotlib numpy
 python benchmarks/security_benchmark.py
 ```
 
@@ -808,7 +810,7 @@ if __name__ == "__main__":
 
     # Also output JSON for programmatic use
     json_output = {
-        "version": "0.2.2",
+        "version": amg_version,
         "total_cases": result.total,
         "accuracy": round(result.accuracy, 4),
         "precision": round(result.precision, 4),
