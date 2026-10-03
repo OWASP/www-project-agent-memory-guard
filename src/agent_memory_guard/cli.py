@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -178,6 +179,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
             "the guarded memory store. Put it behind an authenticating proxy or keep it "
             "on 127.0.0.1."
         )
+    # `server.py` selects its guard policy from AMG_POLICY when Uvicorn imports
+    # the application module. Set it before `uvicorn.run` so the documented CLI
+    # option controls the running server, including reload child processes.
+    os.environ["AMG_POLICY"] = args.policy
+
     print(f"Starting Agent Memory Guard API server on {args.host}:{args.port}")
     print(f"Policy: {args.policy}")
     print(f"Docs: http://{args.host}:{args.port}/docs")
