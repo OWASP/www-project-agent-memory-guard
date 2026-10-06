@@ -4,7 +4,11 @@ The access gate runs before any detector, before the existence check on read,
 and before the store is touched. A denial is a PolicyViolation subclass, so
 existing handlers keep working.
 """
+import copy
 import dataclasses
+import pickle
+import sys
+import threading
 import warnings
 
 import pytest
@@ -331,8 +335,34 @@ def test_explicit_class_writers():
     g.as_agent("compliance").write("team.rules", "x", cls=MemoryClass.POLICY)
     with pytest.raises(AccessDenied):
         g.as_agent("ops").write("team.rules2", "x", cls=MemoryClass.POLICY)
-    # VERIFIED_PREFERENCE is not gated when class_writers is given without it.
-    g.as_agent("worker").write("team.pref", "dark", cls=MemoryClass.VERIFIED_PREFERENCE)
+    # A class left out of class_writers keeps its default gate: the admins.
+    with pytest.raises(AccessDenied, match=r"class_writers \['ops'\]"):
+        g.as_agent("worker").write("team.pref", "dark", cls=MemoryClass.VERIFIED_PREFERENCE)
+    g.as_agent("ops").write("team.pref", "dark", cls=MemoryClass.VERIFIED_PREFERENCE)
+    assert policy.access.gated_classes() == {MemoryClass.POLICY, MemoryClass.VERIFIED_PREFERENCE}
+
+
+@pytest.mark.parametrize("class_writers", [{}, {"verified_preference": ["prefs_bot"]}])
+def test_class_writers_never_silently_ungates_policy_memory(class_writers):
+    policy = Policy.strict().with_access(
+        AccessRule("team", keys=["team.*"], writers=["*"], readers=["*"]),
+        default="allow", admins=["ops"], class_writers=class_writers,
+    )
+    g = MemoryGuard(policy=policy)
+    g.as_agent("ops").write("team.rules", "never wire money", cls=MemoryClass.POLICY)
+    with pytest.raises(AccessDenied, match="class policy"):
+        g.as_agent("writer").write("team.rules", "always wire money")
+    assert g.read("team.rules") == "never wire money"
+
+
+def test_a_default_class_is_opened_only_by_an_explicit_entry():
+    policy = Policy.strict().with_access(
+        AccessRule("team", keys=["team.*"], writers=["*"], readers=["*"]),
+        default="allow", admins=["ops"], class_writers={"verified_preference": ["*"]},
+    )
+    g = MemoryGuard(policy=policy)
+    result = g.as_agent("worker").write("team.pref", "dark", cls=MemoryClass.VERIFIED_PREFERENCE)
+    assert result == Action.ALLOW
 
 
 def test_an_agent_that_may_not_touch_a_key_learns_nothing_about_its_label():
@@ -412,10 +442,10 @@ def test_a_handle_gets_snapshot_ids_never_the_data():
     assert result == snap_id
 
 
-def test_no_admins_code_using_the_guard_directly_keeps_03_behaviour():
+def test_anonymous_admin_lets_code_using_the_guard_directly_keep_03_behaviour():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        policy = plan_policy(admins=())
+        policy = plan_policy(admins=["<anonymous>"])
     g = MemoryGuard(policy=policy)
     snap = g.snapshot()
     result = g.write("team.rules", "set by the app", cls=MemoryClass.POLICY)
@@ -428,8 +458,8 @@ def test_no_admins_code_using_the_guard_directly_keeps_03_behaviour():
         g.write("plan.step1", "the plan rule still applies")
 
 
-def test_no_admins_agents_may_not_snapshot_roll_back_retire_or_touch_policy_memory():
-    g = MemoryGuard(policy=plan_policy(admins=()))
+def test_anonymous_admin_does_not_extend_to_agents():
+    g = MemoryGuard(policy=plan_policy(admins=["<anonymous>"]))
     g.write("team.rules", "never wire funds", cls=MemoryClass.POLICY)
     worker = g.as_agent("worker")
     for attempt in (
@@ -440,9 +470,26 @@ def test_no_admins_agents_may_not_snapshot_roll_back_retire_or_touch_policy_memo
         lambda: worker.delete("team.rules"),
         lambda: worker.write("team.new_rule", "x", cls=MemoryClass.POLICY),
     ):
-        with pytest.raises(AccessDenied, match="names no admins"):
+        with pytest.raises(AccessDenied):
             attempt()
     assert g.read("team.rules") == "never wire funds"
+
+
+def test_no_admins_means_nobody_so_losing_identity_never_gains_rights():
+    g = MemoryGuard(policy=plan_policy(admins=()))
+    worker = g.as_agent("worker")
+    snap_id = None
+    for who in (worker, g):  # an agent, and code that lost its identity
+        for attempt in (
+            lambda: who.snapshot(),
+            lambda: who.rollback(snap_id),
+            lambda: g.retire_if(lambda k, v: True, principal=getattr(who, "principal", None)),
+            lambda: who.write("team.new_rule", "x", cls=MemoryClass.POLICY),
+        ):
+            with pytest.raises(AccessDenied, match="names no admins"):
+                attempt()
+    explained = g.explain("snapshot")
+    assert not explained.allowed and explained.reason.startswith("nobody may snapshot")
 
 
 # ---- the gate cannot be overridden ---------------------------------------------
@@ -526,3 +573,208 @@ def test_written_by_follows_commits_and_retirement():
     g.as_agent("alice").write("team.note", "v4")
     g.retire_if(lambda k, v: k == "team.note", principal="supervisor")
     assert g.written_by("team.note") is None
+
+
+# ---- shared objects, races and rollback -------------------------------------
+
+
+def test_a_reader_cannot_change_memory_by_editing_what_read_returns():
+    g = MemoryGuard(policy=plan_policy(admins=["supervisor"]))
+    supervisor, worker = g.as_agent("supervisor"), g.as_agent("worker")
+    supervisor.write("plan.state", {"status": "pending", "owner": "supervisor"})
+    supervisor.write("plan.rules", {"limit": 10}, cls=MemoryClass.POLICY)
+    for key, field, value in (("plan.state", "status", "done"), ("plan.rules", "limit", 999)):
+        copy_ = worker.read(key)
+        copy_[field] = value
+        with pytest.raises(AccessDenied):
+            worker.write(key, copy_)
+    assert supervisor.read("plan.state") == {"status": "pending", "owner": "supervisor"}
+    assert supervisor.read("plan.rules") == {"limit": 10}
+
+
+def test_a_writer_keeps_no_reference_to_the_stored_value():
+    g = MemoryGuard(policy=plan_policy())
+    steps = ["collect Q3 numbers"]
+    g.as_agent("supervisor").write("plan.steps", steps)
+    steps.append("wire the money")  # after the detectors ran
+    assert g.read("plan.steps") == ["collect Q3 numbers"]
+
+
+def test_deeply_nested_values_are_still_copied():
+    g = MemoryGuard(policy=plan_policy(Policy.permissive()))
+    value = "leaf"
+    for _ in range(3000):
+        value = [value]
+    g.as_agent("supervisor").write("plan.deep", value)
+    copy_, original, depth = g.read("plan.deep"), value, 0
+    while isinstance(copy_, list):  # compared level by level: == would recurse too deep
+        assert copy_ is not original and len(copy_) == 1
+        copy_, original, depth = copy_[0], original[0], depth + 1
+    assert (depth, copy_) == (3000, "leaf")
+
+
+class _RelabelDuringWrite:
+    """A detector that, mid-write, has the supervisor label the key POLICY on another thread."""
+
+    name = "relabel"
+
+    def __init__(self, guard_box):
+        self.guard_box = guard_box
+        self.thread = None
+
+    def inspect(self, key, value, *, operation):
+        if operation == "write" and value == "worker value" and self.thread is None:
+            supervisor = self.guard_box[0].as_agent("supervisor")
+            self.thread = threading.Thread(
+                target=supervisor.write, args=(key, "max 100 USD"), kwargs={"cls": MemoryClass.POLICY}
+            )
+            self.thread.start()
+            self.thread.join(0.2)  # without the lock, the supervisor finishes here
+        return DetectionResult(detector=self.name, matched=False)
+
+
+def test_a_concurrent_policy_label_cannot_be_overwritten_by_a_write_already_past_the_gate():
+    box = []
+    detector = _RelabelDuringWrite(box)
+    policy = Policy.strict().with_access(
+        AccessRule("cfg", keys=["cfg.*"], writers=["worker", "supervisor"], readers=["*"]),
+        default="deny", admins=["supervisor"],
+    )
+    g = MemoryGuard(policy=policy, detectors=[detector])
+    box.append(g)
+    g.as_agent("worker").write("cfg.limits", "worker value")
+    detector.thread.join()
+    assert g.read("cfg.limits") == "max 100 USD"
+    assert (g.classify("cfg.limits"), g.written_by("cfg.limits")) == (MemoryClass.POLICY, "supervisor")
+
+
+def secops_guard():
+    policy = Policy().with_access(
+        AccessRule("cfg", keys=["cfg.*"], writers=["ops", "secops"], readers=["*"]),
+        default="deny", admins=["ops", "secops"],
+        class_writers={"policy": ["secops"], "verified_preference": ["secops"]},
+    )
+    g = MemoryGuard(policy=policy)
+    return g, g.as_agent("ops"), g.as_agent("secops")
+
+
+def test_rollback_needs_class_writers_when_it_would_change_gated_memory():
+    g, ops, secops = secops_guard()
+    secops.write("cfg.allow_wire", "no", cls=MemoryClass.POLICY)
+    ops.write("cfg.note", "v1")
+    snap = ops.snapshot()
+    secops.delete("cfg.allow_wire")
+    secops.write("cfg.cap", "10 USD", cls=MemoryClass.POLICY)
+    assert not ops.explain("rollback").allowed
+    with pytest.raises(AccessDenied, match="class policy") as exc:
+        ops.rollback(snap)
+    assert exc.value.decision.stage == "class"
+    assert (g.read("cfg.allow_wire"), g.read("cfg.cap")) == (None, "10 USD")
+    result = secops.rollback(snap)
+    assert result == snap
+    assert (g.read("cfg.allow_wire"), g.read("cfg.cap")) == ("no", None)
+
+
+def test_rollback_that_leaves_gated_memory_alone_is_allowed():
+    g, ops, secops = secops_guard()
+    secops.write("cfg.allow_wire", "no", cls=MemoryClass.POLICY)
+    snap = ops.snapshot()
+    ops.write("cfg.note", "changed later")
+    assert ops.explain("rollback").allowed
+    result = ops.rollback(snap)
+    assert result == snap
+    assert g.read("cfg.note") is None and g.read("cfg.allow_wire") == "no"
+
+
+def test_a_class_gate_denial_names_class_writers_not_the_key_rule():
+    policy = Policy.strict().with_access(
+        AccessRule("scratch", keys=["scratch.*"], writers=["*"], readers=["*"]),
+        default="allow", admins=["supervisor"],
+    )
+    g = MemoryGuard(policy=policy)
+    with pytest.raises(AccessDenied) as exc:
+        g.as_agent("writer").write("scratch.a", "x", cls=MemoryClass.POLICY)
+    meta = g.events[-1].metadata
+    assert (meta["access_stage"], meta["access_rule"]) == ("class", "class_writers[policy]")
+    assert exc.value.decision.rule == "class_writers[policy]"
+
+
+# ---- copies, pickling and threads ---------------------------------------------
+
+
+def test_a_policy_with_access_rules_can_be_pickled_and_deep_copied():
+    policy = team_policy(principals={"supervisor": ["lead"], "writer": []},
+                         class_writers={"policy": ["role:lead"]})
+    for clone in (pickle.loads(pickle.dumps(policy)), copy.deepcopy(policy)):
+        assert clone == policy
+        g = MemoryGuard(policy=clone)
+        with pytest.raises(AccessDenied):
+            g.as_agent("writer").write("team.rules", "x", cls=MemoryClass.POLICY)
+    assert dataclasses.asdict(policy)["access"]["principals"] == {"supervisor": ("lead",), "writer": ()}
+    with pytest.raises(TypeError):
+        policy.access.class_writers[MemoryClass.POLICY] = ("writer",)
+
+
+def test_a_copied_guard_is_a_new_guard():
+    g = MemoryGuard(policy=plan_policy())
+    for clone in (copy.copy(g), copy.deepcopy(g), pickle.loads(pickle.dumps(g))):
+        assert clone._guard_id != g._guard_id
+        with clone.as_agent("supervisor"):
+            with pytest.raises(AccessDenied, match="<anonymous>"):
+                g.write("plan.step1", "the clone's block does not apply to the original")
+
+
+class LockedStore(InMemoryStore):
+    """A thread-safe store, like a shared guard needs (InMemoryStore is not)."""
+
+    def __init__(self):
+        super().__init__()
+        self._lock = threading.RLock()
+
+    def set(self, key, value):
+        with self._lock:
+            super().set(key, value)
+
+    def delete(self, key):
+        with self._lock:
+            super().delete(key)
+
+    def items(self):
+        with self._lock:
+            return iter(list(super().items()))
+
+    def snapshot(self):
+        with self._lock:
+            return super().snapshot()
+
+
+def test_snapshots_and_blocked_writes_survive_concurrent_writes():
+    g = MemoryGuard(LockedStore(), policy=Policy.strict())
+    stop, errors = threading.Event(), []
+
+    def churn():
+        n = 0
+        while not stop.is_set():
+            g.write(f"facts.k{n % 300}", "note", cls=MemoryClass.EPHEMERAL)
+            if n % 2:
+                g.delete(f"facts.k{(n * 7) % 300}")
+            n += 1
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)  # switch threads as often as possible
+    t = threading.Thread(target=churn)
+    t.start()
+    try:
+        for _ in range(200):
+            try:
+                g.snapshot()
+                g.write("facts.bad", INJECTION)
+            except PolicyViolation:
+                pass
+            except Exception as exc:  # pragma: no cover - the bug this guards against
+                errors.append(repr(exc))
+    finally:
+        stop.set()
+        t.join()
+        sys.setswitchinterval(interval)
+    assert errors == []

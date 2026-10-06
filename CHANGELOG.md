@@ -26,15 +26,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   agent; `write`, `read`, `delete`, `promote`, `snapshot`, `rollback` and `retire_if`
   also take `principal=`. Inside `with guard.as_agent("id"):` plain calls on that
   guard run as the agent; a generator paused inside the block does not pass the
-  identity to its caller. A handle's `snapshot()` and `rollback()` return only the
-  snapshot id. Every `SecurityEvent` has a new `principal` field.
+  identity to its caller, and its own code keeps the identity wherever it is
+  resumed. Tasks and threads started while a generator holds a block open start
+  anonymous. A handle's `snapshot()` and `rollback()` return only the snapshot id.
+  Every `SecurityEvent` has a new `principal` field.
 - **Private namespaces.** A key pattern such as `agents.{owner}.*` with
   `writers=["{owner}"]` gives every agent its own space.
 - **Class gate and admins.** With access rules, only `admins` may `snapshot()`,
-  `rollback()` and `retire_if()`, and only `class_writers` (default: the admins) may
-  write, delete or promote POLICY and VERIFIED_PREFERENCE memory. `retire_if()` skips
-  keys whose class the caller may not change. If no admins are named, only code
-  that calls the guard without an agent identity may do these things.
+  `rollback()` and `retire_if()`, and only the admins may write, delete or promote
+  POLICY and VERIFIED_PREFERENCE memory unless `class_writers` names others for a
+  class. `retire_if()` skips keys whose class the caller may not change, and
+  `rollback()` is refused if it would change such memory. If no admins are named,
+  nobody may do these things; `admins=["<anonymous>"]` gives them to code that calls
+  the guard without an agent identity, as in 0.3.
+- **Values are copied with access rules.** The guard stores a deep copy of each
+  written value and returns a deep copy on read, so an agent cannot change memory it
+  may only read by editing the object it got back.
 - **Looking inside a decision.** `guard.explain(...)` dry-runs an access decision.
   `MemoryGuard(trace=True)` records each step of every operation (identity, access
   rules, each detector, the deciding policy rule, snapshot, commit);
@@ -51,8 +58,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fields give a `PolicyWarning` and are still ignored.
 - `rollback()` now restores class labels and origin tasks saved with the snapshot,
   instead of keeping the labels from before the rollback. This applies with or
-  without access rules. Snapshots record them, with each key's last writer, in a new
-  `metadata["amg_state"]` entry.
+  without access rules. Snapshots record them, with each captured key's last
+  writer, in a new `metadata["amg_state"]` entry.
+- A copied or unpickled `MemoryGuard` is a new guard: `with` blocks and
+  `last_trace()` of the original do not apply to it.
 - `Policy` has a new `access` field (None unless you call `with_access`), which
   shows in its `repr`.
 - CI runs on Python 3.13 and 3.14.

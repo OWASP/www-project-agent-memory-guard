@@ -10,9 +10,12 @@ wins outright:
 2. ambiently, inside ``with guard.as_agent("id"):``. The ambient identity is
    bound to the guard that issued the handle, and every other guard ignores it.
    It covers the code that runs inside the block and the functions it calls,
-   and is inherited by threads (through ``contextvars.copy_context()``) and
-   asyncio tasks started there. It does not reach code that runs while the
-   block is paused at a ``yield``: a generator's caller keeps its own identity;
+   wherever that code is resumed, and is inherited by threads (through
+   ``contextvars.copy_context()``) and asyncio tasks started there. It does not
+   reach code that runs while the block is paused at a ``yield``: a generator's
+   caller keeps its own identity. Tasks and threads started while a generator
+   holds a block open in the same context start anonymous, because the guard
+   cannot tell whether the generator or its caller started them;
 3. otherwise the caller is anonymous.
 
 In-process identity is asserted by the code that calls the guard. It is not
@@ -21,6 +24,7 @@ guard, and never let model output choose the principal.
 """
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import re
 import sys
@@ -98,12 +102,15 @@ class _Entry:
     must not apply to whatever runs in the meantime.
     """
 
-    __slots__ = ("handle", "ctx", "anchor", "kind", "thread", "task")
+    __slots__ = ("handle", "ctx", "anchor", "kind", "thread", "task", "closed")
 
     def __init__(self, handle: AgentHandle, ctx: ActingContext, anchor: FrameType | None) -> None:
         self.handle = handle
         self.ctx = ctx
         self.anchor = anchor  # cleared when the block exits
+        # Set when the block can no longer apply anywhere, including in copies of
+        # the context that child tasks and threads hold.
+        self.closed = False
         if anchor is None:
             self.kind = "plain"
         elif anchor.f_code.co_flags & _GENERATOR_FLAGS:
@@ -119,6 +126,68 @@ _AMBIENT: contextvars.ContextVar[Mapping[int, tuple[_Entry, ...]]] = contextvars
     "amg_ambient", default={}
 )
 
+# Open blocks whose anchor can pause, by id(anchor frame), and every open block
+# by id(handle), for the whole process. A generator can be resumed, and its
+# block exited, in a context other than the one that entered it; these let the
+# guard find the block from its frame wherever that happens. Values are
+# replaced, never mutated in place, so readers need no lock.
+_LOCK = threading.Lock()
+_BY_ANCHOR: dict[int, tuple[_Entry, ...]] = {}
+_BY_HANDLE: dict[int, tuple[_Entry, ...]] = {}
+# guard id -> number of open blocks in _BY_ANCHOR, so other guards skip the stack walk.
+_ANCHORED: dict[int, int] = {}
+
+
+def _register(entry: _Entry) -> None:
+    with _LOCK:
+        hid = id(entry.handle)
+        _BY_HANDLE[hid] = (*_BY_HANDLE.get(hid, ()), entry)
+        if entry.anchor is not None:
+            aid = id(entry.anchor)
+            _BY_ANCHOR[aid] = (*_BY_ANCHOR.get(aid, ()), entry)
+            gid = entry.ctx.guard_id
+            _ANCHORED[gid] = _ANCHORED.get(gid, 0) + 1
+
+
+def _close(entry: _Entry, *, revoke: bool = False) -> None:
+    """End a block. ``revoke`` also ends it in copies of the context."""
+    with _LOCK:
+        # A generator's block is never inherited, so once it ends it must not
+        # make child contexts fail closed either.
+        if revoke or entry.kind == "generator":
+            entry.closed = True
+        tables = [(_BY_HANDLE, id(entry.handle))]
+        if entry.anchor is not None:
+            tables.append((_BY_ANCHOR, id(entry.anchor)))
+        for table, key in tables:
+            before = table.get(key, ())
+            rest = tuple(e for e in before if e is not entry)
+            if rest:
+                table[key] = rest
+            else:
+                table.pop(key, None)
+            if table is _BY_ANCHOR and len(rest) < len(before):
+                gid = entry.ctx.guard_id
+                left = _ANCHORED.get(gid, 1) - 1
+                if left > 0:
+                    _ANCHORED[gid] = left
+                else:
+                    _ANCHORED.pop(gid, None)
+        entry.anchor = None  # drop the frame reference
+
+
+def _open_on_stack(guard_id: int, frame: FrameType | None) -> _Entry | None:
+    """The innermost open block of this guard whose anchor frame is on this stack."""
+    by_anchor = _BY_ANCHOR
+    while frame is not None:
+        entries = by_anchor.get(id(frame))
+        if entries:
+            for entry in reversed(entries):
+                if entry.anchor is frame and entry.ctx.guard_id == guard_id and not entry.closed:
+                    return entry
+        frame = frame.f_back
+    return None
+
 
 def _current_task() -> object | None:
     asyncio = sys.modules.get("asyncio")
@@ -131,15 +200,36 @@ def _current_task() -> object | None:
     return task
 
 
+# The code of the contextlib methods that run a @contextmanager or
+# @asynccontextmanager generator as a context manager.
+_CM_DRIVERS = frozenset(
+    method.__code__
+    for method in (
+        contextlib._GeneratorContextManager.__enter__,
+        contextlib._GeneratorContextManager.__exit__,
+        contextlib._AsyncGeneratorContextManager.__aenter__,
+        contextlib._AsyncGeneratorContextManager.__aexit__,
+    )
+)
+
+
 def _is_context_manager_machinery(frame: FrameType) -> bool:
-    """contextlib frames, and @contextmanager generators that contextlib is driving."""
+    """Frames whose ``with`` blocks belong to their caller.
+
+    These are contextlib's own frames, @contextmanager generators while
+    contextlib is entering or exiting them, and ``__aenter__``/``__aexit__``
+    coroutines, which pause together with the coroutine that awaits them.
+    """
     if frame.f_globals.get("__name__") == "contextlib":
+        return True
+    code = frame.f_code
+    if code.co_flags & _COROUTINE_FLAGS and code.co_name in ("__aenter__", "__aexit__"):
         return True
     back = frame.f_back
     return bool(
-        frame.f_code.co_flags & (_GENERATOR_FLAGS | _COROUTINE_FLAGS)
+        code.co_flags & (_GENERATOR_FLAGS | _COROUTINE_FLAGS)
         and back is not None
-        and back.f_globals.get("__name__") == "contextlib"
+        and back.f_code in _CM_DRIVERS
     )
 
 
@@ -156,41 +246,47 @@ def _anchor(frame: FrameType | None) -> FrameType | None:
     return None
 
 
+def ambient_identity_possible(guard_id: int) -> bool:
+    """Cheap check: could a ``with handle:`` block of this guard apply here?"""
+    return bool(_AMBIENT.get() or guard_id in _ANCHORED)
+
+
 def ambient_for(guard_id: int) -> ActingContext | None:
     """The identity of the innermost running ``with handle:`` block for this guard."""
+    # A block whose own generator or coroutine frame is on this stack applies,
+    # whichever thread, task or context resumed that frame.
+    if guard_id in _ANCHORED:
+        hit = _open_on_stack(guard_id, sys._getframe(1))
+        if hit is not None:
+            return hit.ctx
     entries = _AMBIENT.get().get(guard_id)
     if not entries:
         return None
-    if len(entries) == 1 and entries[0].kind == "plain":
+    if len(entries) == 1 and entries[0].kind == "plain" and not entries[0].closed:
         return entries[0].ctx  # the usual synchronous case
     thread, task = threading.get_ident(), _current_task()
-    running: list[_Entry] = []
     fallback: _Entry | None = None
-    for entry in entries:  # oldest first, so newer entries win ties
-        anchor = entry.anchor
+    ambiguous = False
+    for entry in entries:  # oldest first, so newer entries win
+        if entry.closed:
+            continue
         if entry.kind == "plain":
             fallback = entry
-        elif anchor is not None and entry.thread == thread and entry.task is task:
-            # A paused generator or coroutine has no f_back: its block is paused
-            # too, and its identity stays with it.
-            if anchor.f_back is not None:
-                running.append(entry)
+        elif entry.thread == thread and entry.task is task:
+            # This context's own generator or coroutine block, and its frame is
+            # not on this stack: it is paused, and its identity stays with it.
+            continue
         elif entry.kind == "coroutine":
             fallback = entry  # inherited from the thread or task that started this one
-        # A generator's block is never inherited: the context may have been
-        # copied while the generator was paused.
-    if len(running) == 1 and running[0].kind == "coroutine":
-        return running[0].ctx  # a running coroutine of this task is on this stack
-    if running:
-        # Pick the innermost block whose anchor is on this thread's stack.
-        anchors = {id(e.anchor): e for e in running}
-        frame: FrameType | None = sys._getframe(1)
-        while frame is not None:
-            hit = anchors.get(id(frame))
-            if hit is not None and hit.anchor is frame:
-                return hit.ctx
-            frame = frame.f_back
-    return fallback.ctx if fallback is not None else None
+        else:
+            # A generator's block is never inherited. A context copied while one
+            # was open may have been copied by the generator itself, inside its
+            # block, or by its caller while it was paused; the guard cannot tell
+            # which, so the copy gets no identity from this context.
+            ambiguous = True
+    if ambiguous or fallback is None:
+        return None
+    return fallback.ctx
 
 
 class _OpState:
@@ -266,7 +362,7 @@ class AgentHandle:
         """Roll back to a snapshot (admins only) and return its id."""
         return self._guard.rollback(snapshot_id, principal=self._pid).snapshot_id
 
-    def explain(self, operation: str, key: str, **kw: Any) -> AccessDecision:
+    def explain(self, operation: str, key: str = "*", **kw: Any) -> AccessDecision:
         """Dry-run an operation as this agent. Shows only the deciding rule."""
         self._no_override(kw)
         return self._guard.explain(operation, key, principal=self._pid, **kw)
@@ -276,6 +372,7 @@ class AgentHandle:
         entry = _Entry(self, ActingContext(gid, self.principal, "context"), _anchor(sys._getframe(1)))
         current = _AMBIENT.get()
         _AMBIENT.set({**current, gid: (*current.get(gid, ()), entry)})
+        _register(entry)
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -286,19 +383,42 @@ class AgentHandle:
         entries = current.get(gid, ())
         anchor = _anchor(sys._getframe(1))
         thread, task = threading.get_ident(), _current_task()
-        mine = [i for i, e in enumerate(entries) if e.handle is self]
-        exact = [i for i in mine if entries[i].anchor is anchor]
+        mine = [i for i, e in enumerate(entries) if e.handle is self and not e.closed]
         here = [i for i in mine if entries[i].thread == thread and entries[i].task is task]
-        candidates = exact or here or mine
-        if not candidates:
-            raise RuntimeError(f"{self!r} exited a with block it did not enter in this context")
-        index = candidates[-1]
-        entries[index].anchor = None  # drop the frame reference
-        rest = entries[:index] + entries[index + 1:]
-        updated = {k: v for k, v in current.items() if k != gid}
-        if rest:
-            updated[gid] = rest
-        _AMBIENT.set(updated)
+        if anchor is not None:
+            exact = [i for i in mine if entries[i].anchor is anchor]
+        else:  # a block in plain functions: never a paused generator's block
+            exact = [i for i in here if entries[i].kind == "plain"]
+        candidates = exact or here
+        if candidates:
+            index = candidates[-1]
+            _close(entries[index])
+            rest = entries[:index] + entries[index + 1:]
+            updated = {k: v for k, v in current.items() if k != gid}
+            if rest:
+                updated[gid] = rest
+            _AMBIENT.set(updated)
+            return
+        if anchor is not None:
+            # A generator's block that was resumed, and is ending, in another
+            # thread, task or context: find it by its frame. The entering
+            # context's copy is now stale, so end it there too.
+            found = [e for e in _BY_ANCHOR.get(id(anchor), ()) if e.handle is self]
+            if found:
+                _close(found[-1], revoke=True)
+                return
+        # Exited from a thread or task that did not enter it. Revoke the block so
+        # it stops applying in the context that entered it, then report the misuse.
+        if mine:
+            _close(entries[mine[-1]], revoke=True)
+        else:
+            open_blocks = _BY_HANDLE.get(id(self), ())
+            if len(open_blocks) == 1:
+                _close(open_blocks[0], revoke=True)
+        raise RuntimeError(
+            f"{self!r} exited a with block it did not enter in this thread or task; "
+            "the block has been ended everywhere"
+        )
 
 
 __all__ = ["ActingContext", "AgentHandle", "check_id"]

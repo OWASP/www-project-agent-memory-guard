@@ -5,7 +5,9 @@ import copy
 import dataclasses
 import itertools
 import logging
-from collections.abc import Iterable
+import threading
+import weakref
+from collections.abc import Container, Iterable
 from typing import Any, Callable, NoReturn
 
 from agent_memory_guard.classification import (
@@ -36,7 +38,6 @@ from agent_memory_guard.exceptions import (
     UnknownPrincipal,
 )
 from agent_memory_guard.identity import (
-    _AMBIENT,
     _LAST_TRACE,
     _OP,
     ActingContext,
@@ -44,6 +45,7 @@ from agent_memory_guard.identity import (
     _HandleId,
     _OpState,
     ambient_for,
+    ambient_identity_possible,
     check_id,
 )
 from agent_memory_guard.integrity import IntegrityRegistry, hash_value
@@ -58,8 +60,16 @@ log = logging.getLogger("agent_memory_guard")
 EventHandler = Callable[[SecurityEvent], None]
 
 _GUARD_IDS = itertools.count(1)
+# Ids of guards created with trace=True that are still alive; last_trace()
+# entries of other guards are dropped.
+_LIVE_TRACED: set[int] = set()
 # Snapshot.metadata key holding labels, origin tasks and last writers.
 _STATE_KEY = "amg_state"
+# Operations that run under the guard's lock when the policy has access rules,
+# so the class gate and the commit see the same labels.
+_LOCKED_OPS = frozenset({"write", "delete", "promote", "rollback", "retire", "snapshot"})
+# Traces name the deciding policy rule only while Policy.decide is in use.
+_STOCK_DECIDE = Policy.decide
 
 
 class MemoryGuard:
@@ -110,6 +120,8 @@ class MemoryGuard:
     ) -> None:
         self._guard_id = next(_GUARD_IDS)
         self._trace_on = bool(trace)
+        self._track_trace()
+        self._lock = threading.RLock()
         self._written_by: dict[str, str | None] = {}
         self._store: MemoryStore = store if store is not None else InMemoryStore()
         self._policy = policy or Policy.permissive()
@@ -163,8 +175,26 @@ class MemoryGuard:
         for key in list(self._store.keys()):
             if self._policy.is_immutable(key):
                 self._integrity.baseline(key, self._store.get(key))
-        # Traces name the deciding policy rule unless decide() was overridden.
-        self._names_rules = type(self._policy).decide is Policy.decide
+
+    def _track_trace(self) -> None:
+        if self._trace_on:
+            _LIVE_TRACED.add(self._guard_id)
+            weakref.finalize(self, _LIVE_TRACED.discard, self._guard_id)
+
+    def __getstate__(self) -> dict[str, Any]:
+        state = self.__dict__.copy()
+        state.pop("_lock", None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        # Copies and unpickled guards are new guards: they get their own id, so
+        # with-blocks and last_trace() of the original never apply to them.
+        self.__dict__.update(state)
+        self.__dict__.setdefault("_trace_on", False)
+        self.__dict__.setdefault("_written_by", {})
+        self._guard_id = next(_GUARD_IDS)
+        self._lock = threading.RLock()
+        self._track_trace()
 
     # ---- identity and access ------------------------------------------
 
@@ -229,6 +259,10 @@ class MemoryGuard:
                 ctx.principal, operation, key, current_class=current, target_class=wanted,
                 via=ctx.via, all_rules=all_rules,
             )
+            if operation == "rollback" and decision.allowed:
+                snap = self._snapshots.latest()
+                if snap is not None:
+                    decision = self._rollback_class_check(ctx, snap, decision)
         # Who last wrote a key is read-level information: show it only to agents
         # that may read the key, and to admins.
         if (
@@ -267,7 +301,7 @@ class MemoryGuard:
         if explicit is not None:
             via = "handle" if isinstance(explicit, _HandleId) else "explicit"
             return ActingContext(self._guard_id, check_id(explicit), via)
-        ambient = ambient_for(self._guard_id) if _AMBIENT.get() else None
+        ambient = ambient_for(self._guard_id) if ambient_identity_possible(self._guard_id) else None
         if ambient is not None:
             access = self._access_policy()
             if access is None or access.ambient_identity:
@@ -310,13 +344,23 @@ class MemoryGuard:
             return body(ctx)  # the 0.3 path: nothing to check, attribute or record
         steps: list[TraceStep] | None = [] if self._trace_on else None
         token = _OP.set(_OpState(self._guard_id, ctx, steps))
+        access = self._access_policy()
+        lock = self._lock if access is not None and operation in _LOCKED_OPS else None
         try:
             if steps is not None:
                 steps.append(TraceStep("identity", ctx.principal or "<anonymous>", f"via {ctx.via}"))
                 steps.append(TraceStep("operation", f"{operation} {key!r}"))
-            if gate is not None and self._access_policy() is not None:
-                gate(ctx)
-            result = body(ctx)
+            if lock is not None:
+                # Another thread must not relabel the key between the class gate
+                # and the commit.
+                with lock:
+                    if gate is not None:
+                        gate(ctx)
+                    result = body(ctx)
+            else:
+                if gate is not None and access is not None:
+                    gate(ctx)
+                result = body(ctx)
             if steps is not None:
                 steps.append(TraceStep("result", _describe(operation, result), "done"))
             return result
@@ -327,7 +371,9 @@ class MemoryGuard:
         finally:
             _OP.reset(token)
             if steps is not None:
-                _LAST_TRACE.set({**_LAST_TRACE.get(), self._guard_id: tuple(steps)})
+                traces = {g: t for g, t in _LAST_TRACE.get().items() if g in _LIVE_TRACED}
+                traces[self._guard_id] = tuple(steps)
+                _LAST_TRACE.set(traces)
 
     def _classes_for(
         self,
@@ -444,13 +490,19 @@ class MemoryGuard:
             full, steps=(*acl.steps, TraceStep("graph", edge, "allowed"), *class_steps)
         )
 
-    def _security_state(self) -> dict[str, Any]:
-        return {**self._classification.export_state(), "written_by": dict(self._written_by)}
+    def _security_state(self, keys: Container[str]) -> dict[str, Any]:
+        """Labels, origin tasks and last writers of ``keys`` (the captured keys)."""
+        written_by = dict(self._written_by)
+        return {
+            **self._classification.export_state(keys),
+            "written_by": {k: v for k, v in written_by.items() if k in keys},
+        }
 
     def _capture(self, label: str, metadata: dict[str, Any] | None = None) -> Snapshot:
+        data = self._dump_store()
         meta = dict(metadata or {})
-        meta[_STATE_KEY] = self._security_state()
-        snap = self._snapshots.capture(self._dump_store(), label=label, metadata=meta)
+        meta[_STATE_KEY] = self._security_state(data)
+        snap = self._snapshots.capture(data, label=label, metadata=meta)
         self._step("snapshot", label, snap.snapshot_id)
         return snap
 
@@ -682,7 +734,7 @@ class MemoryGuard:
             principal is None
             and not self._trace_on
             and _OP.get() is None
-            and not _AMBIENT.get()
+            and not ambient_identity_possible(self._guard_id)
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
             action = self._write_impl(
@@ -699,8 +751,9 @@ class MemoryGuard:
 
         def body(ctx: ActingContext) -> Action:
             src = ctx.principal if ctx.principal is not None and source == "agent" else source
+            stored = _detach(value) if self._access_policy() is not None else value
             action = self._write_impl(
-                key, value, source=src, source_class=source_class, source_type=source_type,
+                key, stored, source=src, source_class=source_class, source_type=source_type,
                 receipt_uri=receipt_uri, cls=cls, task_id=task_id,
             )
             if action in (Action.ALLOW, Action.REDACT):
@@ -877,7 +930,7 @@ class MemoryGuard:
             principal is None
             and not self._trace_on
             and _OP.get() is None
-            and not _AMBIENT.get()
+            and not ambient_identity_possible(self._guard_id)
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
             return self._read_impl(key, default, sink=sink)
@@ -885,11 +938,13 @@ class MemoryGuard:
         def gate(ctx: ActingContext) -> None:
             self._enforce(ctx, "read", key)
 
+        detach = self._access_policy() is not None
         return self._run(
-            "read", key, principal, gate, lambda ctx: self._read_impl(key, default, sink=sink)
+            "read", key, principal, gate,
+            lambda ctx: self._read_impl(key, default, sink=sink, detach=detach),
         )
 
-    def _read_impl(self, key: str, default: Any, *, sink: str) -> Any:
+    def _read_impl(self, key: str, default: Any, *, sink: str, detach: bool = False) -> Any:
         if key not in self._store:
             self._step("lookup", key, "not found; default returned")
             return default
@@ -914,6 +969,10 @@ class MemoryGuard:
             self._step("integrity", "sha-256 baseline", "match" if has_baseline else "no baseline")
 
         value = self._store.get(key, default)
+        if detach:
+            # A reader gets its own copy: changing it must not change the stored
+            # value, which only the key's writers may do.
+            value = _detach(value)
         verdicts = self._run_detectors(key, value, operation="read")
         decision = self._decide(verdicts, key=key)
         worst = _highest_severity(verdicts)
@@ -966,7 +1025,7 @@ class MemoryGuard:
             principal is None
             and not self._trace_on
             and _OP.get() is None
-            and not _AMBIENT.get()
+            and not ambient_identity_possible(self._guard_id)
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
             self._delete_impl(key)
@@ -1099,18 +1158,66 @@ class MemoryGuard:
         """Restore the store to a known-good snapshot (latest if id omitted).
 
         Class labels, origin tasks and last writers are restored too, for snapshots
-        that recorded them. When the policy's access rules name ``admins``, only an
-        admin may call it.
+        that recorded them. With access rules, only an admin may call it, and an
+        admin who may not change a gated class (see ``class_writers``) may not roll
+        back a snapshot that would add, remove, change or relabel memory of that
+        class.
         """
 
         def gate(ctx: ActingContext) -> None:
             self._enforce(ctx, "rollback", "*")
 
         return self._run(  # type: ignore[no-any-return]
-            "rollback", "*", principal, gate, lambda ctx: self._rollback_impl(snapshot_id)
+            "rollback", "*", principal, gate, lambda ctx: self._rollback_impl(snapshot_id, ctx)
         )
 
-    def _rollback_impl(self, snapshot_id: str | None) -> Snapshot:
+    def _rollback_class_check(
+        self, ctx: ActingContext, snap: Snapshot, decision: AccessDecision
+    ) -> AccessDecision:
+        """Deny the rollback if it would change memory of a class the caller may not change."""
+        access = self._access_policy()
+        if access is None:
+            return decision
+        principal = ctx.principal
+        now = self._classification.export_state()["classes"]
+        state = snap.metadata.get(_STATE_KEY) if isinstance(snap.metadata, dict) else None
+        # A snapshot from before 0.4 leaves labels as they are.
+        then = dict(state.get("classes") or {}) if isinstance(state, dict) else now
+        def locked(label: str | None) -> MemoryClass | None:
+            if label is None:
+                return None
+            cls = MemoryClass(label)
+            return None if access.may_change_class(principal, cls) else cls
+
+        keys = {k for k, c in now.items() if locked(c)} | {k for k, c in then.items() if locked(c)}
+        if not keys:
+            return decision
+        for key in sorted(keys):
+            in_now, in_then = key in self._store, key in snap.data
+            changed = (
+                now.get(key) != then.get(key)
+                or in_now != in_then
+                or (in_now and not _same_value(self._store.get(key), snap.data[key]))
+            )
+            if not changed:
+                continue
+            cls = locked(now.get(key)) or locked(then.get(key))
+            assert cls is not None
+            who = principal or "<anonymous>"
+            sels = [sel.raw for sel in access._class_sel.get(cls, ())]
+            why = (f"{who} may not roll back to snapshot {snap.snapshot_id}: it would change "
+                   f"{key!r}, which is class {cls.value} (class_writers {sels or 'none named'})")
+            return dataclasses.replace(
+                decision, allowed=False, stage="class", reason=why,
+                rule=f"class_writers[{cls.value}]", pattern=None, owner=None,
+                steps=(*decision.steps, TraceStep("class", f"{key} {cls.value}", "changed; no match")),
+            )
+        return dataclasses.replace(
+            decision,
+            steps=(*decision.steps, TraceStep("class", "gated memory", "unchanged by this snapshot")),
+        )
+
+    def _rollback_impl(self, snapshot_id: str | None, ctx: ActingContext | None = None) -> Snapshot:
         snap = (
             self._snapshots.get(snapshot_id)
             if snapshot_id
@@ -1118,6 +1225,19 @@ class MemoryGuard:
         )
         if snap is None:
             raise LookupError("No snapshot available for rollback")
+        access = self._access_policy()
+        if access is not None and ctx is not None:
+            gated = {c for c in access.gated_classes()
+                     if not access.may_change_class(ctx.principal, c)}
+            if gated:
+                allowed = access.decide(ctx.principal, "rollback", "*", via=ctx.via,
+                                        all_rules=ctx.via != "handle")
+                decision = self._rollback_class_check(ctx, snap, allowed)
+                if not decision.allowed:
+                    self._record(dataclasses.replace(
+                        decision, steps=tuple(s for s in decision.steps if s.stage == "class")
+                    ))
+                    self._deny(decision)
 
         if hasattr(self._store, "restore"):
             self._store.restore(snap.data)
@@ -1129,7 +1249,7 @@ class MemoryGuard:
 
         state = snap.metadata.get(_STATE_KEY)
         if isinstance(state, dict):
-            self._classification.import_state(copy.deepcopy(state))
+            self._classification.import_state(state)  # copies into new dicts
             self._written_by = dict(state.get("written_by") or {})
         else:  # a snapshot from before 0.4: labels stay as they are, last writers are unknown
             self._written_by = {}
@@ -1211,21 +1331,15 @@ class MemoryGuard:
             return Action.ALLOW
         chosen = Action.ALLOW
         for verdict in verdicts:
-            if tracing and self._names_rules:
-                action, rule = self._policy.evaluate(verdict.detector, verdict.severity, key)
-                self._step(
-                    "policy",
-                    f"{verdict.detector}/{verdict.severity.value}",
-                    f"rule {rule or 'default_action'} -> {action.value}",
-                )
-            else:
-                action = self._policy.decide(verdict.detector, verdict.severity, key)
-                if tracing:
-                    self._step(
-                        "policy",
-                        f"{verdict.detector}/{verdict.severity.value}",
-                        f"decide() -> {action.value}",
-                    )
+            # The verdict always comes from decide(), so tracing never changes it.
+            action = self._policy.decide(verdict.detector, verdict.severity, key)
+            if tracing:
+                detail = f"decide() -> {action.value}"
+                if getattr(self._policy.decide, "__func__", None) is _STOCK_DECIDE:
+                    named, rule = self._policy.evaluate(verdict.detector, verdict.severity, key)
+                    if named == action:
+                        detail = f"rule {rule or 'default_action'} -> {action.value}"
+                self._step("policy", f"{verdict.detector}/{verdict.severity.value}", detail)
             chosen = _escalate(chosen, action)
         if tracing:
             self._step("decision", "most severe action wins", chosen.value)
@@ -1340,6 +1454,86 @@ def _describe(operation: str, result: Any) -> str:
     if operation == "read":
         return "value returned"
     return "completed"
+
+
+def _detach(value: Any) -> Any:
+    """A private deep copy of ``value``, so no two agents share a mutable object."""
+    try:
+        try:
+            return copy.deepcopy(value)
+        except RecursionError:
+            return _copy_nested(value)  # nested deeper than deepcopy can recurse
+    except Exception as exc:
+        raise TypeError(
+            "With access rules, memory values must be deep-copyable, so that an agent "
+            "cannot change memory it may only read by changing a shared object: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+_MUTABLE = (list, dict, set)
+_IMMUTABLE = (tuple, frozenset)
+
+
+def _children(value: Any) -> Iterable[Any]:
+    if type(value) is dict:
+        return [x for kv in value.items() for x in kv]
+    return value  # type: ignore[no-any-return]
+
+
+def _copy_nested(root: Any) -> Any:
+    """Deep-copy plain lists, dicts, sets, tuples and frozensets without recursion.
+
+    Other objects are copied with copy.deepcopy. Shared and cyclic references
+    are preserved, as deepcopy would.
+    """
+    containers: dict[int, Any] = {}  # id -> original container
+    stack = [root]
+    while stack:  # find every plain container
+        value = stack.pop()
+        if type(value) in _MUTABLE + _IMMUTABLE and id(value) not in containers:
+            containers[id(value)] = value
+            stack.extend(_children(value))
+    copies: dict[int, Any] = {i: type(v)() for i, v in containers.items() if type(v) in _MUTABLE}
+    leaf_memo: dict[int, Any] = {}
+
+    def get(value: Any) -> Any:
+        if id(value) in containers:
+            return copies[id(value)]
+        return copy.deepcopy(value, leaf_memo)
+
+    for original in containers.values():  # tuples and frozensets, children first
+        if type(original) not in _IMMUTABLE or id(original) in copies:
+            continue
+        todo: list[tuple[Any, bool]] = [(original, False)]
+        while todo:
+            node, ready = todo.pop()
+            if id(node) in copies:
+                continue
+            if ready:
+                copies[id(node)] = type(node)(get(c) for c in node)
+                continue
+            todo.append((node, True))
+            todo.extend(
+                (c, False) for c in node if type(c) in _IMMUTABLE and id(c) not in copies
+            )
+    for i, original in containers.items():  # then fill the mutable containers
+        shell = copies[i]
+        if type(original) is dict:
+            for k, v in original.items():
+                shell[get(k)] = get(v)
+        elif type(original) is list:
+            shell.extend(get(c) for c in original)
+        elif type(original) is set:
+            shell.update(get(c) for c in original)
+    return get(root)
+
+
+def _same_value(a: Any, b: Any) -> bool:
+    try:
+        return bool(a == b)
+    except Exception:  # values that cannot be compared count as changed
+        return False
 
 
 def _coerce_source_class(value: SourceClass | str | None) -> SourceClass:

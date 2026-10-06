@@ -6,7 +6,7 @@ guard learns **which agent is asking**, so you can say who may read and write ea
 key.
 
 ```python
-from agent_memory_guard import AccessRule, MemoryGuard, Policy, format_trace
+from agent_memory_guard import AccessDenied, AccessRule, MemoryGuard, Policy, format_trace
 
 policy = Policy.strict().with_access(
     AccessRule("plan", keys=["plan.*"], writers=["supervisor"], readers=["*"]),
@@ -21,7 +21,10 @@ writer = guard.as_agent("writer")
 
 supervisor.write("plan.step1", "collect Q3 numbers")   # allowed
 writer.read("plan.step1")                              # allowed: readers ["*"]
-writer.write("plan.step1", "skip the review")          # AccessDenied
+try:
+    writer.write("plan.step1", "skip the review")      # denied
+except AccessDenied as exc:
+    print(exc)
 print(format_trace(guard.last_trace()))                # how the guard decided
 ```
 
@@ -38,15 +41,22 @@ the key, and before the store is touched. Every stage must pass:
    delete and promote, `readers` for read.
 4. **Default.** Keys no rule covers get `default` (`"allow"` or `"deny"`).
 5. **Class gate.** Writing, deleting or promoting POLICY or VERIFIED_PREFERENCE
-   memory needs `class_writers` (by default, the `admins`). It runs after the
-   rules, so an agent that may not touch a key learns nothing about its label.
+   memory needs the `admins`, unless `class_writers` names someone else for that
+   class. A class you leave out of `class_writers` keeps the admins; to open one
+   to everyone, say so: `class_writers={"verified_preference": ["*"]}`. The gate
+   runs after the rules, so an agent that may not touch a key learns nothing
+   about its label. A `rollback()` that would change memory of a gated class
+   also needs its class writers.
 
-If you name no `admins`, agents can't snapshot, roll back, retire or touch
-POLICY and VERIFIED_PREFERENCE memory. Code that calls the guard without an
-agent identity still can, as in 0.3.
+If you name no `admins`, nobody may snapshot, roll back, retire or touch POLICY
+and VERIFIED_PREFERENCE memory. To keep 0.3 behaviour for code that calls the
+guard without an agent identity, add `"<anonymous>"` to `admins`. Code that
+loses its agent identity (see below) then gets those rights too, so prefer
+naming the agents.
 
 A denial raises `AccessDenied`, logs an `access_control` event naming the agent
-and the rule, and takes no snapshot. `AccessDenied` is a `PolicyViolation`, so
+and what denied it (a rule, `admins` or `class_writers[...]`), and takes no
+snapshot. `AccessDenied` is a `PolicyViolation`, so
 code that already catches `PolicyViolation` keeps working. If access allows the
 operation, the usual detectors and content rules run as before.
 
@@ -62,12 +72,23 @@ operation, the usual detectors and content rules run as before.
   `guard.write(...)` calls on *that guard* run as the writer. This is how you use
   adapters that don't know about agents yet. Other guards ignore the block. Set
   `ambient_identity=False` to turn this off.
-  - The block covers the functions it calls, asyncio tasks it starts, and
-    threads it starts with `contextvars.copy_context()`.
-  - It works through `@contextmanager` wrappers and `ExitStack`.
-  - When a generator pauses at a `yield` inside the block, its caller keeps its
-    own identity, so two agents' streams can interleave safely.
-- Otherwise the caller is **anonymous**, and matches only `"*"` and `default`.
+    - The block covers the functions it calls, asyncio tasks it starts, and
+      threads it starts with `contextvars.copy_context()`.
+    - It works through `@contextmanager` wrappers, `ExitStack` and classes
+      whose `__enter__` or `__aenter__` enters the handle.
+    - When a generator pauses at a `yield` inside the block, its caller keeps
+      its own identity, so two agents' streams can interleave safely. The
+      generator's own code keeps the block's identity wherever it is resumed,
+      even on another thread.
+    - Tasks and threads started while a generator holds a block open in the
+      same context start **anonymous**: the guard cannot tell whether the
+      generator or its caller started them. Give them a handle instead.
+    - Exit a block in the thread or task that entered it (a generator's block
+      may end wherever the generator is resumed). Exiting it from anywhere
+      else raises `RuntimeError` and ends the block everywhere.
+- Otherwise the caller is **anonymous**, and matches only `"*"`,
+  `"<anonymous>"` and `default`. A thread started without
+  `contextvars.copy_context()` is anonymous too.
 
 Agent ids are 1 to 64 characters of letters, digits, `_` and `-`. Roles come only
 from the `principals` registry, never from the caller.
@@ -80,6 +101,7 @@ from the `principals` registry, never from the caller.
 | `"writer"` | the agent with that id |
 | `"role:lead"` | agents the registry gives that role (needs `principals=`) |
 | `"{owner}"` | the agent named by the key's `{owner}` segment |
+| `"<anonymous>"` | callers with no agent identity |
 
 `{owner}` must be a whole key segment after a literal prefix, as in
 `agents.{owner}.*`. A segment that is not a valid id, such as `Payments Bot`,
@@ -102,6 +124,10 @@ belongs to nobody, so it is denied.
 - **This is not authentication.** In-process identity is whatever the calling
   code says. It protects against confused or poisoned agents, not against
   malicious code in the same process. Never let model output choose the agent id.
+- **Values are copied.** With access rules, the guard stores a deep copy of what
+  is written and returns a deep copy on read, so an agent cannot change memory
+  it may only read by editing the object it got back. Values must be
+  deep-copyable.
 - **Whoever holds the raw guard sees everything.** `snapshot()`, `list_snapshots()`
   and the `retire_if()` predicate see every value. Keep the guard with your
   orchestrator and give agents handles.

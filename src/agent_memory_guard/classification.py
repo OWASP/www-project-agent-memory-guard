@@ -9,7 +9,7 @@ verified preferences without explicit verification.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Container, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -114,11 +114,19 @@ class ClassificationRegistry:
             self._classes.pop(key, None)
             self._origin_task.pop(key, None)
 
-    def export_state(self) -> dict[str, dict[str, Any]]:
-        """Labels and origin tasks, as plain data (saved in snapshots)."""
+    def export_state(self, keys: Container[str] | None = None) -> dict[str, dict[str, Any]]:
+        """Labels and origin tasks, as plain data (saved in snapshots).
+
+        With ``keys``, only entries for those keys are exported.
+        """
+        # dict() copies in one step, so a write on another thread cannot change
+        # the dict while it is being read.
+        classes, tasks = dict(self._classes), dict(self._origin_task)
+        if keys is None:
+            return {"classes": {k: c.value for k, c in classes.items()}, "tasks": tasks}
         return {
-            "classes": {k: c.value for k, c in self._classes.items()},
-            "tasks": dict(self._origin_task),
+            "classes": {k: c.value for k, c in classes.items() if k in keys},
+            "tasks": {k: t for k, t in tasks.items() if k in keys},
         }
 
     def import_state(self, state: Mapping[str, Mapping[str, Any]]) -> None:

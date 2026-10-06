@@ -335,3 +335,175 @@ def test_exiting_a_block_that_was_never_entered_is_an_error():
     g = plan_guard()
     with pytest.raises(RuntimeError, match="did not enter"):
         g.as_agent("worker").__exit__(None, None, None)
+
+
+# ---- blocks that move between threads, tasks and contexts -------------------
+
+
+def acting_as(g, key="notes.probe"):
+    """Who the guard thinks is calling: the last writer of a key anyone may write."""
+    g.write(key, "probe")
+    return g.written_by(key)
+
+
+def worker_stream(g, seen):
+    with g.as_agent("worker"):
+        yield 1
+        seen.append(acting_as(g))
+        yield 2
+
+
+def test_a_generator_block_resumed_on_another_thread_keeps_its_identity():
+    g, seen = plan_guard(), []
+
+    async def main():
+        it = worker_stream(g, seen)
+        with g.as_agent("supervisor"):
+            await asyncio.to_thread(next, it)
+            await asyncio.to_thread(next, it)
+        it.close()
+
+    asyncio.run(main())
+    assert seen == ["worker"]
+
+
+def test_a_generator_block_resumed_in_another_context_keeps_its_identity():
+    g, seen = plan_guard(), []
+    it = worker_stream(g, seen)
+    contextvars.copy_context().run(next, it)
+    with g.as_agent("supervisor"):
+        next(it)  # the worker's code runs here, inside the supervisor's block
+        assert acting_as(g, "notes.sup") == "supervisor"
+    it.close()
+    assert seen == ["worker"]
+    assert acting_as(g, "notes.after") is None
+
+
+def test_an_async_generator_stepped_from_new_tasks_keeps_its_identity():
+    g, seen = plan_guard(), []
+
+    async def stream():
+        with g.as_agent("worker"):
+            yield 1
+            seen.append(acting_as(g))
+            yield 2
+
+    async def main():
+        s = stream()
+        with g.as_agent("supervisor"):
+            await asyncio.gather(s.__anext__())
+            await asyncio.gather(s.__anext__())
+        await s.aclose()  # exits the block in yet another context, without error
+
+    asyncio.run(main())
+    assert seen == ["worker"]
+
+
+def test_tasks_and_threads_started_inside_a_generators_block_start_anonymous():
+    g = plan_guard()
+
+    async def child():
+        return acting_as(g, "notes.child")
+
+    async def stream():
+        with g.as_agent("worker"):
+            yield await asyncio.create_task(child())
+
+    async def main():
+        with g.as_agent("supervisor"):
+            return [x async for x in stream()]
+
+    # Not the supervisor's identity: the guard cannot tell who started the task.
+    assert asyncio.run(main()) == [None]
+
+    def sync_stream():
+        with g.as_agent("worker"):
+            with ThreadPoolExecutor(1) as pool:
+                yield pool.submit(contextvars.copy_context().run, acting_as, g, "n.t").result()
+
+    with g.as_agent("supervisor"):
+        assert list(sync_stream()) == [None]
+        # Once the generator's block has ended, children inherit as usual.
+        with ThreadPoolExecutor(1) as pool:
+            inherited = pool.submit(contextvars.copy_context().run, acting_as, g, "n.u")
+            assert inherited.result() == "supervisor"
+
+
+def test_a_stream_advanced_by_an_exit_stack_callback_keeps_its_identity():
+    g, seen = plan_guard(), []
+    it = worker_stream(g, seen)
+    with g.as_agent("supervisor"):
+        with contextlib.ExitStack() as stack:
+            stack.callback(next, it)
+        # The stream is paused in the worker's block; the caller is the supervisor.
+        assert acting_as(g, "notes.sup") == "supervisor"
+        next(it)
+    it.close()
+    assert seen == ["worker"]
+
+
+def test_a_block_exited_from_another_task_is_ended_everywhere():
+    g = plan_guard()
+    supervisor = g.as_agent("supervisor")
+
+    async def exit_in_task(handle):
+        handle.__exit__(None, None, None)
+
+    async def main():
+        supervisor.__enter__()
+        with pytest.raises(RuntimeError, match="did not enter"):
+            await asyncio.create_task(exit_in_task(supervisor))
+        return acting_as(g)
+
+    assert asyncio.run(main()) is None
+
+
+def test_a_block_exited_from_another_thread_is_ended_in_the_entering_thread():
+    g = plan_guard()
+    supervisor = g.as_agent("supervisor")
+    supervisor.__enter__()
+    with ThreadPoolExecutor(1) as pool:
+        failed = pool.submit(supervisor.__exit__, None, None, None)
+        with pytest.raises(RuntimeError, match="did not enter"):
+            failed.result()
+    assert acting_as(g) is None
+
+
+def test_async_class_wrappers_apply_the_block_to_their_body():
+    g = plan_guard()
+
+    class AsSupervisor:
+        async def __aenter__(self):
+            self.handle = g.as_agent("supervisor")
+            self.handle.__enter__()
+
+        async def __aexit__(self, *exc):
+            self.handle.__exit__(*exc)
+
+    async def main():
+        async with AsSupervisor():
+            await asyncio.sleep(0)
+            inside = acting_as(g)
+        return inside, acting_as(g, "notes.after")
+
+    assert asyncio.run(main()) == ("supervisor", None)
+
+
+def test_leaving_a_plain_block_never_ends_a_paused_generators_block():
+    g = plan_guard()
+    worker = g.as_agent("worker")
+    seen = []
+
+    def stream():
+        with worker:
+            yield
+            seen.append(acting_as(g, "notes.gen"))
+            yield
+
+    it = stream()
+    with worker:  # the same handle, entered first by plain code
+        next(it)
+    assert acting_as(g) is None  # the plain block ended, not the generator's
+    next(it)
+    it.close()
+    assert seen == ["worker"]

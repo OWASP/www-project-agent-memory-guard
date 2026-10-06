@@ -29,9 +29,11 @@ The decision runs in a fixed order, and every stage must pass:
    and VERIFIED_PREFERENCE by default) needs ``class_writers``.
 
 The class gate runs after the key rules, so an agent that may not touch a key
-learns nothing about its label. When ``admins`` is empty, admin operations and
-the default class gate are open only to anonymous callers (code that uses the
-guard directly, as in 0.3); agents are refused.
+learns nothing about its label. When ``admins`` is empty, nobody may run admin
+operations or change POLICY and VERIFIED_PREFERENCE memory. To let code that
+uses the guard without an agent identity do so, as in 0.3, name
+``"<anonymous>"`` among the admins; then any code that loses its agent identity
+(for example a thread started without ``copy_context()``) gets those rights too.
 """
 from __future__ import annotations
 
@@ -39,14 +41,14 @@ import fnmatch
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from types import MappingProxyType
-from typing import Any
+from typing import Any, NoReturn
 
 from agent_memory_guard.classification import MemoryClass
 from agent_memory_guard.identity import check_id, is_valid_id
 from agent_memory_guard.trace import TraceStep
 
 OWNER = "{owner}"
+ANONYMOUS = "<anonymous>"
 _GLOB_CHARS = re.compile(r"[*?\[]")
 
 READ_OPS = frozenset({"read"})
@@ -63,11 +65,12 @@ class Selector:
 
     ``"*"`` matches anyone, including anonymous callers; ``"<id>"`` one agent;
     ``"role:<name>"`` every agent the registry gives that role; ``"{owner}"`` the
-    agent named by the key's ``{owner}`` segment.
+    agent named by the key's ``{owner}`` segment; ``"<anonymous>"`` callers with
+    no agent identity.
     """
 
     raw: str
-    kind: str  # "any" | "id" | "role" | "owner" | "anonymous" (internal)
+    kind: str  # "any" | "id" | "role" | "owner" | "anonymous"
     value: str | None = None
 
     @classmethod
@@ -79,6 +82,8 @@ class Selector:
             return cls(text, "any")
         if text == OWNER:
             return cls(text, "owner")
+        if text == ANONYMOUS:
+            return cls(text, "anonymous")
         if text.startswith("role:"):
             role = text[5:]
             if not is_valid_id(role):
@@ -86,7 +91,8 @@ class Selector:
             return cls(text, "role", role)
         if not is_valid_id(text):
             raise ValueError(
-                f"Bad selector {raw!r}: expected '*', an agent id, 'role:<name>' or '{OWNER}'"
+                f"Bad selector {raw!r}: expected '*', an agent id, 'role:<name>', "
+                f"'{OWNER}' or '{ANONYMOUS}'"
             )
         return cls(text, "id", text)
 
@@ -95,7 +101,7 @@ class Selector:
             return True
         if self.kind == "anonymous":
             return pid is None
-        if pid is None:  # an anonymous caller only ever matches "*"
+        if pid is None:  # an anonymous caller matches only "*" and "<anonymous>"
             return False
         if self.kind == "id":
             return pid == self.value
@@ -251,10 +257,32 @@ def _coerce_class(value: Any) -> MemoryClass:
     return value if isinstance(value, MemoryClass) else MemoryClass(str(value))
 
 
-# Stands in for admins and the default class gate when no admins are named:
-# only anonymous callers (code using the guard directly) pass, as in 0.3.
-_ANONYMOUS_ONLY = (Selector("<anonymous>", "anonymous"),)
-_NO_ADMINS = "the policy names no admins, so only code using the guard without an agent identity may"
+class _ReadOnlyDict(dict):  # type: ignore[type-arg]
+    """A dict that cannot be changed. Unlike MappingProxyType it can be pickled
+    and deep-copied, so a policy with access rules can be too."""
+
+    __slots__ = ()
+
+    def _read_only(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise TypeError("access policy mappings are read-only; use dataclasses.replace()")
+
+    __setitem__ = __delitem__ = __ior__ = _read_only  # type: ignore[assignment]
+    clear = pop = popitem = setdefault = update = _read_only  # type: ignore[assignment]
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return (type(self), (dict(self),))
+
+    def __copy__(self) -> _ReadOnlyDict:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _ReadOnlyDict:
+        return self  # keys and values are strings and tuples of strings
+
+
+_NO_ADMINS = (
+    "the policy names no admins (pass admins=[...] with agent ids or roles, or "
+    f"'{ANONYMOUS}' for code that uses the guard without an agent identity)"
+)
 
 
 @dataclass(frozen=True)
@@ -265,14 +293,15 @@ class AccessPolicy:
         rules: Ordered access rules; the first match wins.
         default: ``"allow"`` or ``"deny"`` for keys no rule covers.
         admins: Selectors allowed to ``rollback()``, ``retire_if()`` and
-            ``snapshot()``. When empty, only anonymous callers (code using the
-            guard directly, as in 0.3) may; agents may not.
+            ``snapshot()``. When empty, nobody may. ``"<anonymous>"`` lets code
+            that uses the guard without an agent identity, as in 0.3.
         principals: The registry, ``{id: [roles]}``. When given, undeclared ids
             are denied and every id named in a rule must be declared.
         class_writers: ``{MemoryClass: selectors}`` for classes only some agents
-            may write, delete or promote into or out of. When omitted, POLICY and
-            VERIFIED_PREFERENCE are gated to ``admins`` (to anonymous callers only
-            when ``admins`` is empty).
+            may write, delete or promote into or out of. POLICY and
+            VERIFIED_PREFERENCE are gated to ``admins`` unless an entry here
+            says otherwise; ``{"verified_preference": ["*"]}`` opens one to
+            everyone. Other classes are gated only when listed.
         ambient_identity: When False, ``with guard.as_agent(...)`` blocks are
             ignored and only ``principal=`` and handles carry identity.
 
@@ -305,22 +334,25 @@ class AccessPolicy:
         if dupes:
             raise ValueError(f"Duplicate access rule names: {dupes}")
         put("admins", (self.admins,) if isinstance(self.admins, str) else tuple(self.admins))
-        put("_admin_sel", _selectors(self.admins, "admins") or _ANONYMOUS_ONLY)
+        put("_admin_sel", _selectors(self.admins, "admins"))
         registry: dict[str, tuple[str, ...]] = {}
         for pid, roles in dict(self.principals).items():
             roles = (roles,) if isinstance(roles, str) else tuple(roles or ())
             registry[check_id(pid)] = tuple(check_id(r) for r in roles)
-        put("principals", MappingProxyType(registry))
+        put("principals", _ReadOnlyDict(registry))
         put("_registry", {pid: frozenset(roles) for pid, roles in registry.items()})
+        # POLICY and VERIFIED_PREFERENCE stay gated to the admins unless
+        # class_writers says otherwise for that class.
+        class_sel = {c: self._admin_sel for c in _GATED_BY_DEFAULT}
         if self.class_writers is not None:
             gated = {
                 _coerce_class(c): ((s,) if isinstance(s, str) else tuple(s))
                 for c, s in dict(self.class_writers).items()
             }
-            put("class_writers", MappingProxyType(gated))
-            class_sel = {c: _selectors(s, f"class_writers[{c.value}]") for c, s in gated.items()}
-        else:
-            class_sel = {c: self._admin_sel for c in _GATED_BY_DEFAULT}
+            put("class_writers", _ReadOnlyDict(gated))
+            class_sel.update(
+                {c: _selectors(s, f"class_writers[{c.value}]") for c, s in gated.items()}
+            )
         put("_class_sel", class_sel)
         everything = [(f"rule {r.name!r}", s) for r in self.rules for s in (*r._writers, *r._readers)]
         everything += [("admins", s) for s in self._admin_sel]
@@ -342,7 +374,7 @@ class AccessPolicy:
 
     @staticmethod
     def _describe(sels: tuple[Selector, ...]) -> str:
-        return "none named" if sels is _ANONYMOUS_ONLY else str([s.raw for s in sels])
+        return str([s.raw for s in sels]) if sels else "none named"
 
     # ---- queries ------------------------------------------------------
 
@@ -447,9 +479,8 @@ class AccessPolicy:
             allowed_by = self._describe(admin_sel)
             ok = any(s.matches(principal, roles, None) for s in admin_sel)
             steps.append(TraceStep("admin", f"admins {allowed_by}", "match" if ok else "no match"))
-            if admin_sel is _ANONYMOUS_ONLY:
-                why = f"{_NO_ADMINS} {operation} (pass admins=[...] to let agents)"
-                return done(ok, "admin", why)
+            if not admin_sel:
+                return done(False, "admin", f"nobody may {operation}: {_NO_ADMINS}")
             if ok:
                 return done(True, "admin", f"{who} is one of admins {allowed_by}")
             return done(False, "admin", f"{operation} requires one of admins {allowed_by}")
@@ -469,13 +500,13 @@ class AccessPolicy:
             ok = any(s.matches(principal, roles, None) for s in sels)
             steps.append(TraceStep("class", f"{cls.value} writers {allowed_by}", "match" if ok else "no match"))
             if not ok:
-                if sels is _ANONYMOUS_ONLY:
-                    why = (f"{who} may not {operation} class {cls.value}: the policy names no "
-                           "admins or class_writers, so only code using the guard without an "
-                           "agent identity may change it")
+                if not sels:
+                    why = (f"{who} may not {operation} class {cls.value}: nobody may change it, "
+                           f"because {_NO_ADMINS} and class_writers names nobody for it")
                 else:
                     why = f"{who} may not {operation} class {cls.value} (class_writers {allowed_by})"
-                return done(False, "class", why, rule, pattern, owner)
+                # Name what denied, not the key rule that allowed the operation.
+                return done(False, "class", why, f"class_writers[{cls.value}]", None, owner)
         return done(allowed, stage, why, rule, pattern, owner)
 
     def _decide_rule(

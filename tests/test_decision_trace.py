@@ -308,3 +308,36 @@ def test_format_trace():
     steps = (TraceStep("identity", "writer", "via handle"), TraceStep("operation", "write 'k'"))
     assert format_trace(steps) == " 1. identity   writer -> via handle\n 2. operation  write 'k'"
     assert format_trace(None) == ""
+
+
+def test_tracing_never_changes_the_verdict_of_a_patched_decide():
+    for trace in (False, True):
+        policy = team_policy(Policy.permissive())
+        policy.decide = lambda detector, severity, key: Action.BLOCK  # an instance override
+        g = MemoryGuard(policy=policy, trace=trace)
+        with pytest.raises(PolicyViolation):
+            g.as_agent("writer").write("team.note", INJECTION)
+
+
+def test_dead_traced_guards_do_not_pile_up():
+    import gc
+
+    from agent_memory_guard.identity import _LAST_TRACE
+
+    for _ in range(200):
+        MemoryGuard(policy=team_policy(), trace=True).write("team.note", "hello")
+    gc.collect()
+    g = MemoryGuard(policy=team_policy(), trace=True)
+    g.write("team.note", "hello")
+    assert len(_LAST_TRACE.get()) <= 2
+    assert g.last_trace() is not None
+
+
+def test_snapshots_carry_state_only_for_the_keys_they_captured():
+    store = InMemoryStore()
+    g = MemoryGuard(store, policy=team_policy())
+    g.as_agent("writer").write("team.a", "x", cls=MemoryClass.EPHEMERAL)
+    g.as_agent("writer").write("team.gone", "y", cls=MemoryClass.EPHEMERAL)
+    store.delete("team.gone")  # e.g. a TTL expiry outside the guard
+    state = g.snapshot(principal="supervisor").metadata["amg_state"]
+    assert set(state["classes"]) == set(state["written_by"]) == {"team.a"}
