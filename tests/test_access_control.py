@@ -770,7 +770,7 @@ def test_snapshots_and_blocked_writes_survive_concurrent_writes():
                 g.snapshot()
                 g.write("facts.bad", INJECTION)
             except PolicyViolation:
-                pass
+                pass  # the injection write is meant to be blocked; only other errors count
             except Exception as exc:  # pragma: no cover - the bug this guards against
                 errors.append(repr(exc))
     finally:
