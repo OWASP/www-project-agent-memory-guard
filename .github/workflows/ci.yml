@@ -48,8 +48,8 @@ jobs:
       - name: Run tests through the access gate and with tracing on
         if: matrix.python-version == '3.12'
         run: |
-          AMG_TEST_MODE=allow-all pytest tests/ -q
-          AMG_TEST_MODE=trace pytest tests/ -q
+          AMG_TEST_MODE=allow-all python -m pytest tests/ -q
+          AMG_TEST_MODE=trace python -m pytest tests/ -q
 
       - name: Upload coverage report
         if: matrix.python-version == '3.11'

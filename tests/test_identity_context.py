@@ -66,7 +66,8 @@ def test_a_handle_cannot_claim_to_be_someone_else():
 def test_ambient_identity_applies_to_plain_calls_inside_the_block():
     g = plan_guard()
     with g.as_agent("supervisor"):
-        assert g.write("plan.step1", "collect Q3 numbers") == Action.ALLOW
+        result = g.write("plan.step1", "collect Q3 numbers")
+        assert result == Action.ALLOW
     assert g.written_by("plan.step1") == "supervisor"
     with pytest.raises(AccessDenied):
         g.write("plan.step1", "after the block, anonymous again")
@@ -89,7 +90,8 @@ def test_ambient_identity_is_bound_to_the_guard_that_issued_it():
     plain = MemoryGuard(policy=Policy.strict())
 
     with team_a.as_agent("supervisor"):
-        assert team_a.write("plan.step1", "ok") == Action.ALLOW
+        result = team_a.write("plan.step1", "ok")
+        assert result == Action.ALLOW
         with pytest.raises(AccessDenied) as exc:
             team_b.write("plan.step1", "should be anonymous here")
         with pytest.raises(PolicyViolation):
@@ -116,7 +118,8 @@ def test_ambient_identity_can_be_switched_off():
     with g.as_agent("supervisor"):
         with pytest.raises(AccessDenied, match="<anonymous>"):
             g.write("plan.step1", "ambient is ignored")
-    assert g.as_agent("supervisor").write("plan.step1", "handles still work") == Action.ALLOW
+    result = g.as_agent("supervisor").write("plan.step1", "handles still work")
+    assert result == Action.ALLOW
 
 
 def test_asyncio_tasks_keep_their_own_identity():
@@ -132,7 +135,8 @@ def test_asyncio_tasks_keep_their_own_identity():
     async def main():
         return await asyncio.gather(*(agent(n) for n in ("worker_a", "worker_b", "worker_c")))
 
-    assert asyncio.run(main()) == ["worker_a", "worker_b", "worker_c"]
+    result = asyncio.run(main())
+    assert result == ["worker_a", "worker_b", "worker_c"]
 
 
 def test_one_handle_entered_by_tasks_that_exit_out_of_order():
@@ -244,7 +248,8 @@ def test_a_paused_worker_stream_resumed_inside_a_supervisor_block_stays_the_work
     with g.as_agent("supervisor"):
         with pytest.raises(AccessDenied, match="worker"):
             next(stream)
-        assert g.write("plan.step1", "the supervisor's own write") == Action.ALLOW
+        result = g.write("plan.step1", "the supervisor's own write")
+        assert result == Action.ALLOW
 
 
 def test_async_generators_keep_their_own_identity():
@@ -288,12 +293,15 @@ def test_context_manager_wrappers_and_exit_stacks_apply_to_their_body():
             self.handle.__exit__(*exc)
 
     with as_supervisor():
-        assert g.write("plan.step1", "via @contextmanager") == Action.ALLOW
+        result = g.write("plan.step1", "via @contextmanager")
+        assert result == Action.ALLOW
     with contextlib.ExitStack() as stack:
         stack.enter_context(g.as_agent("supervisor"))
-        assert g.write("plan.step2", "via ExitStack") == Action.ALLOW
+        result = g.write("plan.step2", "via ExitStack")
+        assert result == Action.ALLOW
     with SupervisorStep():
-        assert g.write("plan.step3", "via a class") == Action.ALLOW
+        result = g.write("plan.step3", "via a class")
+        assert result == Action.ALLOW
     with pytest.raises(AccessDenied, match="<anonymous>"):
         g.write("plan.step4", "all blocks have ended")
 
@@ -302,7 +310,8 @@ def test_context_manager_wrappers_and_exit_stacks_apply_to_their_body():
             await asyncio.sleep(0)
             return g.write("plan.step5", "@contextmanager in a coroutine")
 
-    assert asyncio.run(in_a_task()) == Action.ALLOW
+    result = asyncio.run(in_a_task())
+    assert result == Action.ALLOW
 
 
 def test_tasks_started_inside_a_block_inherit_it():
@@ -318,7 +327,8 @@ def test_tasks_started_inside_a_block_inherit_it():
         g.write("results.worker.q3", "42")
         return g.written_by("results.worker.q3")
 
-    assert asyncio.run(main()) == "worker"
+    result = asyncio.run(main())
+    assert result == "worker"
 
 
 def test_exiting_a_block_that_was_never_entered_is_an_error():

@@ -55,7 +55,8 @@ def team_policy(**kw):
 
 def test_only_the_supervisor_may_write_the_plan():
     g = MemoryGuard(policy=plan_policy())
-    assert g.as_agent("supervisor").write("plan.step1", "collect Q3 numbers") == Action.ALLOW
+    result = g.as_agent("supervisor").write("plan.step1", "collect Q3 numbers")
+    assert result == Action.ALLOW
 
     with pytest.raises(AccessDenied) as exc:
         g.as_agent("writer").write("plan.step1", "skip the review")
@@ -81,7 +82,8 @@ def test_anonymous_callers_match_only_star_and_the_default():
     with pytest.raises(AccessDenied, match="<anonymous> is not in writers"):
         g.write("plan.step1", "rewritten")
     assert g.read("plan.step1") == "collect Q3 numbers"  # readers ["*"] include anonymous
-    assert g.write("notes.ok", "fine") == Action.ALLOW  # no rule covers it; default allow
+    result = g.write("notes.ok", "fine")
+    assert result == Action.ALLOW  # no rule covers it; default allow
 
 
 def test_default_deny_covers_keys_no_rule_matches():
@@ -100,8 +102,10 @@ def test_with_access_returns_a_copy():
 
 def test_no_access_rules_means_no_access_checks():
     g = MemoryGuard(policy=Policy.strict())
-    assert g.as_agent("anyone").write("plan.step1", "x") == Action.ALLOW
-    assert g.write("plan.step1", "y") == Action.ALLOW
+    result = g.as_agent("anyone").write("plan.step1", "x")
+    assert result == Action.ALLOW
+    result = g.write("plan.step1", "y")
+    assert result == Action.ALLOW
 
 
 # ---- what a denial does not do ---------------------------------------------
@@ -251,7 +255,8 @@ def test_unmodified_crewai_memory_checks_owner_reads_through_the_guard():
     executor_mem = GuardedMemory(object(), g, agent_id="executor")
     analyst_mem = GuardedMemory(object(), g, agent_id="analyst")
     with g.as_agent("executor"):
-        assert executor_mem.write("creds_plan", "rotate the db credentials tonight") is True
+        result = executor_mem.write("creds_plan", "rotate the db credentials tonight")
+        assert result is True
 
     with g.as_agent("analyst"):
         assert analyst_mem.read("creds_plan", owner="executor") is None
@@ -265,7 +270,8 @@ def test_unmodified_crewai_memory_checks_owner_reads_through_the_guard():
 def test_class_gate_on_write_overwrite_and_delete():
     g = MemoryGuard(policy=team_policy())
     supervisor, worker = g.as_agent("supervisor"), g.as_agent("worker")
-    assert supervisor.write("team.rules", "never wire funds", cls=MemoryClass.POLICY) == Action.ALLOW
+    result = supervisor.write("team.rules", "never wire funds", cls=MemoryClass.POLICY)
+    assert result == Action.ALLOW
 
     with pytest.raises(AccessDenied, match="may not write class policy"):
         worker.write("team.other_rules", "wire funds", cls="policy")
@@ -356,7 +362,8 @@ def test_retire_if_keeps_keys_whose_class_the_caller_may_not_change():
         seen.append(key)
         return True
 
-    assert g.retire_if(everything, principal="ops") == ["sys.cache"]
+    result = g.retire_if(everything, principal="ops")
+    assert result == ["sys.cache"]
     assert seen == ["sys.cache"]  # the predicate never saw the POLICY value
     assert g.read("sys.rules") == "never wire money"
     assert g.classify("sys.rules") == MemoryClass.POLICY
@@ -389,8 +396,10 @@ def test_admin_operations_need_an_admin():
     ):
         with pytest.raises(AccessDenied, match="requires one of admins"):
             attempt()
-    assert supervisor.rollback(snap) == snap
-    assert g.retire_if(lambda k, v: False, principal="supervisor") == []
+    result = supervisor.rollback(snap)
+    assert result == snap
+    result = g.retire_if(lambda k, v: False, principal="supervisor")
+    assert result == []
 
 
 def test_a_handle_gets_snapshot_ids_never_the_data():
@@ -399,7 +408,8 @@ def test_a_handle_gets_snapshot_ids_never_the_data():
     supervisor.write("plan.step1", "collect Q3 numbers")
     snap_id = supervisor.snapshot()
     assert isinstance(snap_id, str)
-    assert supervisor.rollback() == snap_id
+    result = supervisor.rollback()
+    assert result == snap_id
 
 
 def test_no_admins_code_using_the_guard_directly_keeps_03_behaviour():
@@ -408,9 +418,12 @@ def test_no_admins_code_using_the_guard_directly_keeps_03_behaviour():
         policy = plan_policy(admins=())
     g = MemoryGuard(policy=policy)
     snap = g.snapshot()
-    assert g.write("team.rules", "set by the app", cls=MemoryClass.POLICY) == Action.ALLOW
-    assert g.retire_if(lambda k, v: False) == []
-    assert g.rollback(snap.snapshot_id).snapshot_id == snap.snapshot_id
+    result = g.write("team.rules", "set by the app", cls=MemoryClass.POLICY)
+    assert result == Action.ALLOW
+    result = g.retire_if(lambda k, v: False)
+    assert result == []
+    result = g.rollback(snap.snapshot_id)
+    assert result.snapshot_id == snap.snapshot_id
     with pytest.raises(AccessDenied):
         g.write("plan.step1", "the plan rule still applies")
 
@@ -446,7 +459,8 @@ def test_permissive_content_policies_cannot_allow_an_access_denial(base):
     with pytest.raises(AccessDenied):
         g.as_agent("writer").write("plan.step1", "skip the review")
     # Content decisions are still the policy's: this injection is allowed.
-    assert g.as_agent("supervisor").write("plan.step1", INJECTION) == Action.ALLOW
+    result = g.as_agent("supervisor").write("plan.step1", INJECTION)
+    assert result == Action.ALLOW
 
 
 # ---- the registry ---------------------------------------------------------

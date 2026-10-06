@@ -250,7 +250,8 @@ def test_trace_of_a_content_block_shows_each_detector_and_the_snapshot():
 )
 def test_trace_of_allow_redact_and_quarantine(value, action, stage, outcome):
     g = MemoryGuard(policy=team_policy(), trace=True)
-    assert g.as_agent("writer").write("team.note", value) == action
+    result = g.as_agent("writer").write("team.note", value)
+    assert result == action
     steps = g.last_trace()
     assert TraceStep(stage, "team.note", outcome) in steps
     assert steps[-1] == TraceStep("result", f"returned {action.value}", "done")
