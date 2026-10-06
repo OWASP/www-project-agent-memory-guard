@@ -22,8 +22,12 @@ Example policy:
 """
 from __future__ import annotations
 
+import dataclasses
 import fnmatch
-from collections.abc import Iterable
+import os
+import sys
+import warnings
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -31,6 +35,8 @@ from typing import Any
 import yaml
 
 from agent_memory_guard.events import Action, Severity
+from agent_memory_guard.exceptions import PolicyWarning
+from agent_memory_guard.policies.access import AccessPolicy, AccessRule
 
 _VALID_ACTIONS = {a.value for a in Action}
 
@@ -72,6 +78,8 @@ class Policy:
         immutable_keys: Glob patterns for keys monitored with cryptographic integrity checks.
         rules: Ordered list of rules to evaluate when scanning keys.
         version: Policy syntax version. Defaults to 1.
+        access: Per-agent access rules (see :meth:`with_access`). None, the
+            default, means no access checks, exactly as in 0.3.
 
     Example:
         >>> policy = Policy.strict()
@@ -83,6 +91,7 @@ class Policy:
     immutable_keys: tuple[str, ...] = ()
     rules: list[PolicyRule] = field(default_factory=list)
     version: int = 1
+    access: AccessPolicy | None = None
 
     def is_immutable(self, key: str) -> bool:
         """True if `key` matches any ``immutable_keys`` glob.
@@ -100,8 +109,52 @@ class Policy:
                 return rule.action
         return self.default_action
 
+    def evaluate(self, detector: str, severity: Severity, key: str) -> tuple[Action, str | None]:
+        """Like :meth:`decide`, but also return the name of the deciding rule.
+
+        The name is None when no rule matched and ``default_action`` applied.
+        """
+        for rule in self.rules:
+            if rule.applies_to(detector, severity, key):
+                return rule.action, rule.name
+        return self.default_action, None
+
+    def with_access(
+        self,
+        *rules: AccessRule,
+        default: str = "deny",
+        admins: Iterable[str] = (),
+        principals: Mapping[str, Iterable[str]] | None = None,
+        class_writers: Mapping[Any, Iterable[str]] | None = None,
+        ambient_identity: bool = True,
+    ) -> Policy:
+        """Return a copy of this policy with per-agent access rules.
+
+        The guard checks access before any detector runs. Content rules
+        (``rules``) still apply to every operation that access allows.
+
+        Example:
+            >>> policy = Policy.strict().with_access(
+            ...     AccessRule("plan", keys=["plan.*"], writers=["supervisor"], readers=["*"]),
+            ...     default="allow",
+            ...     admins=["supervisor"],
+            ... )
+
+        See :class:`~agent_memory_guard.policies.access.AccessPolicy` for the arguments.
+        """
+        access = AccessPolicy(
+            list(rules),
+            default=default,
+            admins=(admins,) if isinstance(admins, str) else tuple(admins),
+            principals=dict(principals or {}),
+            class_writers=class_writers,
+            ambient_identity=ambient_identity,
+        )
+        return dataclasses.replace(self, rules=list(self.rules), access=access)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Policy:
+        _check_fields(data)
         rules = [_parse_rule(r) for r in data.get("rules", [])]
         protected_keys = tuple(data.get("protected_keys", ()) or ())
         immutable_keys = tuple(data.get("immutable_keys", ()) or ())
@@ -361,6 +414,61 @@ def _check_key_rules_have_keys(
             "'protected_keys' and no 'immutable_keys', so they can never match. "
             "Declare the keys to guard, or drop the rule(s)."
         )
+
+
+_KNOWN_TOP_FIELDS = {"version", "default_action", "protected_keys", "immutable_keys", "rules"}
+_KNOWN_RULE_FIELDS = {"name", "on", True, "action", "min_severity", "keys"}
+# Fields that can only mean per-agent permissions. 0.3 silently dropped them,
+# which let every agent through, so they are now an error, in any letter case.
+_ACCESS_TOP_FIELDS = {"access", "principals", "agents"}
+_ACCESS_RULE_FIELDS = {
+    "access", "agents", "agent", "writers", "writer", "readers", "reader", "principal",
+    "principals",
+}
+_PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _is_access_field(key: Any, fields: set[str]) -> bool:
+    return isinstance(key, str) and key.strip().lower() in fields
+
+
+def _warn(message: str) -> None:
+    """Emit a PolicyWarning that points at the first caller outside this package."""
+    frame = sys._getframe(1)
+    level = 2
+    while frame.f_back is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame = frame.f_back
+        level += 1
+    warnings.warn(message, PolicyWarning, stacklevel=level)
+
+
+def _check_fields(data: dict[str, Any]) -> None:
+    """Fail on per-agent fields this loader would ignore; warn on other unknown fields."""
+    access_top = sorted(str(k) for k in data if _is_access_field(k, _ACCESS_TOP_FIELDS))
+    if access_top:
+        raise ValueError(
+            f"Policy section(s) {access_top} are not read from YAML in this version, so "
+            "they would grant nothing. Build per-agent access rules in Python with "
+            "Policy.with_access(AccessRule(...)); YAML support for access rules is planned."
+        )
+    unknown_top = sorted(str(k) for k in data if k not in _KNOWN_TOP_FIELDS)
+    for raw in data.get("rules", []) or []:
+        if not isinstance(raw, dict):
+            continue
+        name = raw.get("name", "?")
+        access_fields = sorted(str(k) for k in raw if _is_access_field(k, _ACCESS_RULE_FIELDS))
+        if access_fields:
+            raise ValueError(
+                f"Rule {name!r} has per-agent field(s) {access_fields}. Detector rules "
+                "cannot carry per-agent permissions (0.3 silently ignored them, which let "
+                "every agent through). Use Policy.with_access(AccessRule(name, keys=..., "
+                "writers=..., readers=...)) instead."
+            )
+        unknown = sorted(str(k) for k in raw if k not in _KNOWN_RULE_FIELDS)
+        if unknown:
+            _warn(f"Rule {name!r}: unknown field(s) {unknown} are ignored")
+    if unknown_top:
+        _warn(f"Unknown policy field(s) {unknown_top} are ignored")
 
 
 def merge_protected_keys(policy: Policy, extra: Iterable[str] = ()) -> tuple[str, ...]:

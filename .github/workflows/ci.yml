@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -44,6 +44,12 @@ jobs:
           coverage run -m pytest tests/ -v
           coverage report
           coverage xml
+
+      - name: Run tests through the access gate and with tracing on
+        if: matrix.python-version == '3.12'
+        run: |
+          AMG_TEST_MODE=allow-all pytest tests/ -q
+          AMG_TEST_MODE=trace pytest tests/ -q
 
       - name: Upload coverage report
         if: matrix.python-version == '3.11'

@@ -9,8 +9,10 @@ verified preferences without explicit verification.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class MemoryClass(str, Enum):
@@ -111,6 +113,18 @@ class ClassificationRegistry:
         else:
             self._classes.pop(key, None)
             self._origin_task.pop(key, None)
+
+    def export_state(self) -> dict[str, dict[str, Any]]:
+        """Labels and origin tasks, as plain data (saved in snapshots)."""
+        return {
+            "classes": {k: c.value for k, c in self._classes.items()},
+            "tasks": dict(self._origin_task),
+        }
+
+    def import_state(self, state: Mapping[str, Mapping[str, Any]]) -> None:
+        """Replace labels and origin tasks with ``export_state()`` output."""
+        self._classes = {k: MemoryClass(v) for k, v in dict(state.get("classes") or {}).items()}
+        self._origin_task = dict(state.get("tasks") or {})
 
     def keys_with_class(self, mclass: MemoryClass) -> list[str]:
         return [k for k, c in self._classes.items() if c == mclass]

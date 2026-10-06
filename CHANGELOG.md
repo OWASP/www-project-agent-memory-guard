@@ -14,6 +14,49 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-agent access control.** `Policy.with_access(AccessRule(...))` says which
+  agents may read and write which keys, for example "only the supervisor may change
+  `plan.*`". The guard checks it before any detector runs, before the existence check
+  on read, and before the store is touched. A denial raises `AccessDenied` (a
+  `PolicyViolation`), logs an `access_control` event and takes no snapshot. Policies
+  without access rules behave as before.
+- **Agent identity.** `guard.as_agent("id")` returns an `AgentHandle` bound to one
+  agent; `write`, `read`, `delete`, `promote`, `snapshot`, `rollback` and `retire_if`
+  also take `principal=`. Inside `with guard.as_agent("id"):` plain calls on that
+  guard run as the agent; a generator paused inside the block does not pass the
+  identity to its caller. A handle's `snapshot()` and `rollback()` return only the
+  snapshot id. Every `SecurityEvent` has a new `principal` field.
+- **Private namespaces.** A key pattern such as `agents.{owner}.*` with
+  `writers=["{owner}"]` gives every agent its own space.
+- **Class gate and admins.** With access rules, only `admins` may `snapshot()`,
+  `rollback()` and `retire_if()`, and only `class_writers` (default: the admins) may
+  write, delete or promote POLICY and VERIFIED_PREFERENCE memory. `retire_if()` skips
+  keys whose class the caller may not change. If no admins are named, only code
+  that calls the guard without an agent identity may do these things.
+- **Looking inside a decision.** `guard.explain(...)` dry-runs an access decision.
+  `MemoryGuard(trace=True)` records each step of every operation (identity, access
+  rules, each detector, the deciding policy rule, snapshot, commit);
+  `guard.last_trace()` returns them, events carry them in `metadata["trace"]`, and
+  `format_trace()` prints them.
+- `Policy.evaluate()` returns the action and the name of the deciding rule.
+
+### Changed
+
+- **YAML policies with per-agent fields now fail to load.** 0.3 silently ignored
+  fields such as `agents: [supervisor]` on a rule, which let every agent through.
+  Rule fields `agent(s)`, `writer(s)`, `reader(s)`, `principal(s)` and top-level
+  `access`, `principals` or `agents` sections now raise `ValueError`. Other unknown
+  fields give a `PolicyWarning` and are still ignored.
+- `rollback()` now restores class labels and origin tasks saved with the snapshot,
+  instead of keeping the labels from before the rollback. This applies with or
+  without access rules. Snapshots record them, with each key's last writer, in a new
+  `metadata["amg_state"]` entry.
+- `Policy` has a new `access` field (None unless you call `with_access`), which
+  shows in its `repr`.
+- CI runs on Python 3.13 and 3.14.
+
 ## [0.3.3] - 2026-10-02
 
 ### Security
