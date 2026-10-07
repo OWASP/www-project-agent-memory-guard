@@ -8,13 +8,19 @@ from agent_memory_guard.classification import (
 )
 from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceClass, SourceType
 from agent_memory_guard.exceptions import (
+    AccessDenied,
     ClassificationError,
     IntegrityError,
     MemoryGuardError,
     PolicyViolation,
+    PolicyWarning,
+    UnknownPrincipal,
 )
 from agent_memory_guard.guard import MemoryGuard
+from agent_memory_guard.identity import AgentHandle
+from agent_memory_guard.policies.access import AccessDecision, AccessPolicy, AccessRule
 from agent_memory_guard.policies.policy import Policy
+from agent_memory_guard.trace import TraceStep, format_trace
 
 __version__ = "0.3.3"
 
@@ -40,5 +46,14 @@ __all__ = [
     "PolicyViolation",
     "IntegrityError",
     "ClassificationError",
+    "AccessDenied",
+    "AccessDecision",
+    "AccessPolicy",
+    "AccessRule",
+    "AgentHandle",
+    "PolicyWarning",
+    "TraceStep",
+    "UnknownPrincipal",
+    "format_trace",
     "__version__",
 ]

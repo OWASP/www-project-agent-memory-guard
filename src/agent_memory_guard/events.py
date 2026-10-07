@@ -72,6 +72,10 @@ class SecurityEvent:
         metadata: Arbitrary additional event metadata. Defaults to an empty dict.
         timestamp: Epoch timestamp when the event was recorded. Defaults to current time.
         event_id: Unique string identifier for this event. Defaults to a random UUID.
+        principal: The agent the operation ran as, or None for an anonymous caller.
+            Set by the guard from ``principal=``, an AgentHandle, or a
+            ``with guard.as_agent(...)`` block. Like ``source_class`` it is asserted
+            by the calling code, not authenticated.
     """
 
     detector: str
@@ -86,6 +90,7 @@ class SecurityEvent:
     metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    principal: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -101,6 +106,7 @@ class SecurityEvent:
             "receipt_uri": self.receipt_uri,
             "source_type": self.source_type.value,
             "metadata": self.metadata,
+            "principal": self.principal,
         }
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 from agent_memory_guard.events import Action
-from agent_memory_guard.exceptions import PolicyViolation
+from agent_memory_guard.exceptions import AccessDenied, PolicyViolation
 from agent_memory_guard.guard import MemoryGuard
 
 _HAS_LLAMAINDEX = False
@@ -109,19 +109,31 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
         self._store.add_message(key, message, idx=idx)
 
     def delete_messages(self, key: str) -> list[ChatMessage] | None:
-        msg_key = f"{self.store_key}.{key}"
-        try:
-            self.guard.delete(msg_key)
-        except PolicyViolation:
-            pass
+        # Each message has its own guard key, so delete those: access rules on
+        # them apply, and no guard entries are left behind.
+        count = len(self._store.get_messages(key) or [])
+        msg_keys = [f"{self.store_key}.{key}.{i}" for i in range(count)]
+        for msg_key in msg_keys:
+            # Check every message first, so that a denial leaves both stores alone.
+            if not self.guard.explain("delete", msg_key).allowed:
+                self.guard.delete(msg_key)  # raises AccessDenied and logs the denial
+        for msg_key in msg_keys:
+            try:
+                self.guard.delete(msg_key)
+            except AccessDenied:
+                raise
+            except PolicyViolation:
+                pass  # a protected key: cleanup of the conversation goes ahead, as in 0.3
         return cast("list[ChatMessage] | None", self._store.delete_messages(key))
 
     def delete_message(self, key: str, idx: int) -> ChatMessage | None:
         msg_key = f"{self.store_key}.{key}.{idx}"
         try:
             self.guard.delete(msg_key)
+        except AccessDenied:
+            raise  # the agent may not delete it, so leave the backing store alone
         except PolicyViolation:
-            pass
+            pass  # a protected key: cleanup of the conversation goes ahead, as in 0.3
         return cast("ChatMessage | None", self._store.delete_message(key, idx))
 
     def delete_last_message(self, key: str) -> ChatMessage | None:

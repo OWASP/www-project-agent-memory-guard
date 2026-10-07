@@ -14,6 +14,82 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-agent access control.** `Policy.with_access(AccessRule(...))` says which
+  agents may read and write which keys, for example "only the supervisor may change
+  `plan.*`". The guard checks it before any detector runs, before the existence check
+  on read, and before the store is touched. A denial raises `AccessDenied` (a
+  `PolicyViolation`), logs an `access_control` event and takes no snapshot. Policies
+  without access rules behave as before.
+- **Agent identity.** `guard.as_agent("id")` returns an `AgentHandle` bound to one
+  agent; `write`, `read`, `delete`, `promote`, `snapshot`, `rollback` and `retire_if`
+  also take `principal=`. Inside `with guard.as_agent("id"):` plain calls on that
+  guard run as the agent; a generator paused inside the block does not pass the
+  identity to its caller, and its own code keeps the identity wherever it is
+  resumed. A `with` statement in an ordinary function belongs to that function, so
+  the tasks and threads it starts get its identity even when a generator further up
+  the stack called it. Tasks and threads started while a generator holds a block
+  open start anonymous. A handle's `snapshot()` and `rollback()` return only the
+  snapshot id. Every `SecurityEvent` has a new `principal` field.
+- **Private namespaces.** A key pattern such as `agents.{owner}.*` with
+  `writers=["{owner}"]` gives every agent its own space.
+- **Class gate and admins.** With access rules, only `admins` may `snapshot()`,
+  `rollback()` and `retire_if()`, and only the admins may write, delete or promote
+  POLICY and VERIFIED_PREFERENCE memory unless `class_writers` names others for a
+  class. `retire_if()` skips keys whose class the caller may not change, and
+  `rollback()` is refused if it would change such memory. If no admins are named,
+  nobody may do these things; `admins=["<anonymous>"]` gives them to code that calls
+  the guard without an agent identity, as in 0.3.
+- **Values are copied with access rules.** The guard stores a deep copy of each
+  written value and returns a deep copy on read, so an agent cannot change memory it
+  may only read by editing the object it got back.
+- **Looking inside a decision.** `guard.explain(...)` dry-runs an access decision
+  (`snapshot_id=` picks the snapshot for `rollback`). `MemoryGuard(trace=True)`
+  records each step of every operation (identity, access rules, each detector, the
+  deciding policy rule, snapshot, commit); `guard.last_trace()` returns those of the
+  last operation in the current thread or asyncio task, events carry them in
+  `metadata["trace"]`, and `format_trace()` prints them. When one operation logs
+  several events (`retire_if()`), each carries the opening steps and the steps
+  since the previous event.
+- `Policy.evaluate()` returns the action and the name of the deciding rule.
+
+### Changed
+
+- **YAML policies with per-agent fields now fail to load.** 0.3 silently ignored
+  fields such as `agents: [supervisor]` on a rule, which let every agent through.
+  Rule fields `agent(s)`, `writer(s)`, `reader(s)`, `principal(s)` and top-level
+  `access`, `principals` or `agents` sections now raise `ValueError`. Other unknown
+  fields give a `PolicyWarning` and are still ignored.
+- `rollback()` now restores class labels and origin tasks saved with the snapshot,
+  instead of keeping the labels from before the rollback. This applies with or
+  without access rules. Snapshots record them, with each captured key's last
+  writer, in a new `metadata["amg_state"]` entry.
+- A copied or unpickled `MemoryGuard` is a new guard: `with` blocks and
+  `last_trace()` of the original do not apply to it.
+- `Policy` has a new `access` field (None unless you call `with_access`), which
+  shows in its `repr`.
+- `rollback()` on a store without `restore()` writes copies of the snapshot's
+  values (the value itself if it cannot be copied), so editing a restored value no
+  longer changes the snapshot.
+- `Policy.from_dict()` and `load_policy()` raise `ValueError` for a policy document
+  that is not a mapping, such as a list, a string or `false`. 0.3 raised
+  `AttributeError`, or for an empty list, `0` or `false` loaded an empty policy
+  that allows everything. An empty document still loads the default policy.
+- Without access rules, each operation now checks for an agent identity. A write
+  plus a read costs about 3 to 5 microseconds more than in 0.3.3: about 10 to 15% on
+  a tiny value and 2 to 5% on a typical one (Python 3.12 and 3.13).
+- CI runs on Python 3.13 and 3.14.
+
+### Fixed
+
+- `AccessDenied`, `ClassificationError` and `IntegrityError` can be pickled and
+  copied, so they reach the caller from a process pool instead of breaking it.
+- The LlamaIndex adapter's `delete_message()` and `delete_messages()` raise
+  `AccessDenied` instead of deleting from the backing store when the agent may
+  not delete the messages. `delete_messages()` also deletes each message's guard
+  entry, which 0.3 left behind.
+
 ## [0.3.3] - 2026-10-02
 
 ### Security

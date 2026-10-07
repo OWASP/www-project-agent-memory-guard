@@ -67,6 +67,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Configuration: getting-started/configuration.md
+      - Multi-Agent Access Control: getting-started/multi-agent.md
   - CLI:
       - Overview: cli/index.md
       - amg scan: cli/scan.md

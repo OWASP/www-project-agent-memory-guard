@@ -60,7 +60,7 @@ The `GuardedChatStore` intercepts all chat store operations:
 | `set_messages()` | Screens each message, drops blocked ones |
 | `add_message()` | Screens before storage |
 | `get_messages()` | Returns stored messages (optionally re-screens) |
-| `delete_messages()` | Allowed (cleanup) |
+| `delete_messages()` | Deletes each message's guard entry too; with access rules, an agent that may not delete the messages gets `AccessDenied` and nothing is deleted |
 
 ## Configuration Options
 
