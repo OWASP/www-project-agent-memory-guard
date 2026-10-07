@@ -123,7 +123,7 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
             except AccessDenied:
                 raise
             except PolicyViolation:
-                pass
+                pass  # a protected key: cleanup of the conversation goes ahead, as in 0.3
         return cast("list[ChatMessage] | None", self._store.delete_messages(key))
 
     def delete_message(self, key: str, idx: int) -> ChatMessage | None:
@@ -133,7 +133,7 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
         except AccessDenied:
             raise  # the agent may not delete it, so leave the backing store alone
         except PolicyViolation:
-            pass
+            pass  # a protected key: cleanup of the conversation goes ahead, as in 0.3
         return cast("ChatMessage | None", self._store.delete_message(key, idx))
 
     def delete_last_message(self, key: str) -> ChatMessage | None:
