@@ -73,18 +73,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   values (the value itself if it cannot be copied), so editing a restored value no
   longer changes the snapshot.
 - `Policy.from_dict()` and `load_policy()` raise `ValueError` for a policy document
-  that is not a mapping, where 0.3 raised `AttributeError`.
+  that is not a mapping, such as a list, a string or `false`. 0.3 raised
+  `AttributeError`, or for an empty list, `0` or `false` loaded an empty policy
+  that allows everything. An empty document still loads the default policy.
 - Without access rules, each operation now checks for an agent identity. A write
-  plus a read costs about 3 to 5 microseconds more than in 0.3.3: about 10% on a
-  tiny value and 2 to 5% on a typical one (Python 3.12 and 3.13).
+  plus a read costs about 3 to 5 microseconds more than in 0.3.3: about 10 to 15% on
+  a tiny value and 2 to 5% on a typical one (Python 3.12 and 3.13).
 - CI runs on Python 3.13 and 3.14.
 
 ### Fixed
 
 - `AccessDenied`, `ClassificationError` and `IntegrityError` can be pickled and
   copied, so they reach the caller from a process pool instead of breaking it.
-- The LlamaIndex adapter's `delete_message()` raises `AccessDenied` instead of
-  deleting the message from the backing store when the agent may not delete it.
+- The LlamaIndex adapter's `delete_message()` and `delete_messages()` raise
+  `AccessDenied` instead of deleting from the backing store when the agent may
+  not delete the messages. `delete_messages()` also deletes each message's guard
+  entry, which 0.3 left behind.
 
 ## [0.3.3] - 2026-10-02
 

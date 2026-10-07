@@ -29,6 +29,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import gc
+import itertools
 import opcode
 import re
 import sys
@@ -94,11 +95,13 @@ class _HandleId(str):
 # Code flags of frames that can pause mid-block: generators, coroutines and
 # async generators (inspect.CO_GENERATOR, CO_COROUTINE, CO_ITERABLE_COROUTINE,
 # CO_ASYNC_GENERATOR).
-_GENERATOR_FLAGS = 0x20 | 0x100 | 0x200
+_CO_GENERATOR = 0x20
+_GENERATOR_FLAGS = _CO_GENERATOR | 0x100 | 0x200
 _COROUTINE_FLAGS = 0x80
 _PAUSABLE_FLAGS = _GENERATOR_FLAGS | _COROUTINE_FLAGS
 
 _TaskRef = Callable[[], object]
+_SEQ = itertools.count()  # orders blocks by when they started
 
 
 def _task_ref(task: object | None) -> _TaskRef | None:
@@ -128,7 +131,9 @@ class _Entry:
     is paused too, so its identity must not apply to whatever runs meanwhile.
     """
 
-    __slots__ = ("handle", "ctx", "anchor", "key", "owner", "kind", "thread", "task", "closed")
+    __slots__ = (
+        "handle", "ctx", "anchor", "key", "owner", "kind", "thread", "task", "closed", "seq"
+    )
 
     def __init__(
         self,
@@ -150,6 +155,7 @@ class _Entry:
         self.closed = False
         self.thread = threading.get_ident()
         self.task = _task_ref(_current_task())
+        self.seq = next(_SEQ)
 
 
 def _kind(anchor: FrameType | None) -> str:
@@ -189,18 +195,16 @@ _STATE = _ThreadState()
 # context. They are marked closed at once, and taken out of the registry by the
 # next block that starts or ends safely.
 _DEFERRED: list[_Entry] = []
-_GC_HOOKED = False
 
 
 def _on_gc(phase: str, info: Mapping[str, Any]) -> None:
     _STATE.gc = phase == "start"
 
 
-def _hook_gc() -> None:
-    global _GC_HOOKED
-    _GC_HOOKED = True
-    if _on_gc not in gc.callbacks:
-        gc.callbacks.append(_on_gc)
+# Installed at import, so that even the first block a program opens can tell
+# whether the garbage collector is running.
+if _on_gc not in gc.callbacks:
+    gc.callbacks.append(_on_gc)
 
 
 def _unsafe() -> bool:
@@ -287,16 +291,29 @@ def _prune(guard_id: int) -> None:
 
 
 def _open_on_stack(guard_id: int, frame: FrameType | None) -> _Entry | None:
-    """The innermost open block of this guard whose anchor frame is on this stack."""
+    """The running block of this guard whose anchor frame is on this stack.
+
+    That is the newest open block registered under the frames from here up to
+    and including the innermost generator or coroutine that has one. A block a
+    generator holds applies while that generator runs, however old it is, but
+    below it the newest block wins, wherever it is registered: a block entered
+    through ExitStack is registered under the generator, not the function that
+    entered it.
+    """
     by_anchor = _BY_ANCHOR
+    best: _Entry | None = None
     while frame is not None:
         entries = by_anchor.get(id(frame))
         if entries:
             for entry in reversed(entries):
                 if entry.anchor is frame and entry.ctx.guard_id == guard_id and not entry.closed:
-                    return entry
+                    if best is None or entry.seq > best.seq:
+                        best = entry
+                    break
+        if best is not None and frame.f_code.co_flags & _PAUSABLE_FLAGS:
+            return best
         frame = frame.f_back
-    return None
+    return best
 
 
 def _current_task() -> object | None:
@@ -397,22 +414,34 @@ def _with_owner(caller: FrameType) -> FrameType | None:
 
     Such a block starts and ends inside that function's frame, which cannot
     pause, so the block is never paused either, whatever is further up the
-    stack. The ``with`` may name the handle or a @contextmanager that enters it.
-    Returns None for a block entered in a generator or coroutine, or through an
-    explicit ``__enter__()`` call (ExitStack, helpers): those can be held open
+    stack. The ``with`` may name the handle, or a @contextmanager whose own
+    ``with`` enters it (at any depth). Returns None if any step on the way is
+    not a ``with`` statement (ExitStack, an explicit ``__enter__()`` call) or
+    the ``with`` is in a generator or coroutine: those blocks can be held open
     across a ``yield``.
     """
-    frame, below = caller, None
-    while _is_context_manager_machinery(frame):
-        below, back = frame, frame.f_back
-        if back is None:
+    frame = caller
+    while True:
+        code = frame.f_code
+        if code.co_flags & _PAUSABLE_FLAGS:
+            # Only a @contextmanager generator entered by its caller's `with`,
+            # entering the block with a `with` of its own.
+            back = frame.f_back
+            if (
+                back is None
+                or back.f_code is not _GCM_ENTER
+                or not code.co_flags & _CO_GENERATOR
+                or not _runs_with_statement(frame)
+            ):
+                return None
+            next_frame = back.f_back
+            if next_frame is None:
+                return None
+            frame = next_frame
+            continue
+        if _is_context_manager_machinery(frame):
             return None
-        frame = back
-    if frame.f_code.co_flags & _PAUSABLE_FLAGS:
-        return None
-    if below is not None and below.f_code is not _GCM_ENTER:
-        return None
-    return frame if _runs_with_statement(frame) else None
+        return frame if _runs_with_statement(frame) else None
 
 
 def ambient_identity_possible(guard_id: int) -> bool:
@@ -464,12 +493,19 @@ def ambient_for(guard_id: int) -> ActingContext | None:
 class _OpState:
     """Per-operation state: who is acting, and the trace being recorded."""
 
-    __slots__ = ("guard_id", "ctx", "steps", "checked", "shown")
+    __slots__ = ("guard_id", "ctx", "steps", "per_event", "checked", "shown")
 
-    def __init__(self, guard_id: int, ctx: ActingContext, steps: list[TraceStep] | None) -> None:
+    def __init__(
+        self,
+        guard_id: int,
+        ctx: ActingContext,
+        steps: list[TraceStep] | None,
+        per_event: bool = False,
+    ) -> None:
         self.guard_id = guard_id
         self.ctx = ctx
         self.steps = steps
+        self.per_event = per_event  # give each event only its own steps (retire_if)
         self.checked = 0  # steps up to and including the access check
         self.shown = 0  # steps already given to an earlier event of this operation
 
@@ -478,12 +514,15 @@ class _OpState:
             self.checked = len(self.steps)
 
     def event_steps(self) -> list[TraceStep]:
-        """The steps an event carries: the opening steps, then those since the last event.
+        """The steps an event carries: all steps so far, or for ``per_event``
+        operations the opening steps, then those since the last event.
 
-        An operation that logs many events (``retire_if``) would otherwise copy
+        ``retire_if`` logs an event per retired key, and would otherwise copy
         its whole growing trace into each one.
         """
         steps = self.steps or []
+        if not self.per_event:
+            return list(steps)
         start = max(self.checked, self.shown)
         self.shown = len(steps)
         return steps if start <= self.checked else steps[:self.checked] + steps[start:]
@@ -563,8 +602,6 @@ class AgentHandle:
                 "collection, such as the finally block of a stream the collector closes; "
                 "call the handle's methods there instead"
             )
-        if not _GC_HOOKED:
-            _hook_gc()
         if _DEFERRED:
             _drain_deferred()
         gid = self._guard._guard_id
@@ -612,6 +649,8 @@ class AgentHandle:
             ]
             if anchor is not None:
                 exact = [i for i in mine if entries[i].anchor is anchor]
+                if not exact and self._end_by_frame(anchor):
+                    return  # never fall back to another block of this thread
             else:  # a block in plain functions: never a paused generator's block
                 exact = [i for i in here if entries[i].kind == "plain" and entries[i].owner is None]
             candidates = exact or here
@@ -624,17 +663,6 @@ class AgentHandle:
                 updated[gid] = rest
             _set_ambient(updated)
             return
-        if anchor is not None:
-            # A generator's block that was resumed, and is ending, in another
-            # thread, task or context: find it by its frame. The entering
-            # context's copy is now stale, so end it there too.
-            found = [
-                e for e in _BY_ANCHOR.get(id(anchor), ())
-                if e.handle is self and e.anchor is anchor and not e.closed
-            ]
-            if found:
-                _close(found[-1], revoke=True)
-                return
         # Exited from a thread or task that did not enter it. Revoke the block so
         # it stops applying in the context that entered it, then report the misuse.
         if mine:
@@ -647,6 +675,22 @@ class AgentHandle:
             f"{self!r} exited a with block it did not enter in this thread or task; "
             "the block has been ended everywhere"
         )
+
+    def _end_by_frame(self, anchor: FrameType) -> bool:
+        """End this handle's block registered under ``anchor``, if there is one.
+
+        That is a generator's block that was resumed, and is ending, in another
+        thread, task or context. The entering context's copy is now stale, so
+        it is ended there too.
+        """
+        found = [
+            e for e in _BY_ANCHOR.get(id(anchor), ())
+            if e.handle is self and e.anchor is anchor and not e.closed
+        ]
+        if not found:
+            return False
+        _close(found[-1], revoke=True)
+        return True
 
     def _end_later(self, caller: FrameType) -> None:
         """End this handle's block without taking _LOCK or setting the context."""

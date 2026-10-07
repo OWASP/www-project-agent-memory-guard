@@ -173,6 +173,16 @@ def test_rollback_into_a_store_without_restore_copies_the_snapshot():
     assert store.d["cart"] == {"items": ["apple"]}
 
 
+def test_rollback_into_a_store_without_restore_keeps_values_two_keys_share():
+    store = PlainStore()
+    g = MemoryGuard(store)
+    store.d["a"] = store.d["b"] = {"items": ["apple"]}  # one value under two keys
+    sid = g.snapshot().snapshot_id
+    g.rollback(sid)
+    assert store.d["a"] == {"items": ["apple"]}
+    assert store.d["a"] is store.d["b"]
+
+
 def test_rollback_works_with_snapshots_that_record_no_metadata_or_cannot_be_copied():
     store, value = PlainStore(), Uncopyable()
     g = MemoryGuard(store, snapshots=SharingSnapshots())

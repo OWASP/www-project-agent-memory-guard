@@ -349,7 +349,7 @@ class MemoryGuard:
         ):
             return body(ctx)  # the 0.3 path: nothing to check, attribute or record
         steps: list[TraceStep] | None = [] if self._trace_on else None
-        state = _OpState(self._guard_id, ctx, steps)
+        state = _OpState(self._guard_id, ctx, steps, per_event=operation == "retire")
         token = _OP.set(state)
         access = self._access_policy()
         lock = self._lock if access is not None and operation in _LOCKED_OPS else None
@@ -1258,9 +1258,11 @@ class MemoryGuard:
         else:
             for key in list(self._store.keys()):
                 self._store.delete(key)
-            # Restore copies, so that editing a restored value cannot change the snapshot.
+            # Restore copies, so that editing a restored value cannot change the
+            # snapshot. One memo keeps a value that several keys share as one.
+            memo: dict[int, Any] = {}
             for key, value in snap.data.items():
-                self._store.set(key, _copy_or_share(value))
+                self._store.set(key, _copy_or_share(value, memo))
 
         state = _snapshot_state(snap)
         if isinstance(state, dict):
@@ -1477,11 +1479,11 @@ def _snapshot_state(snap: Snapshot) -> Any:
     return meta.get(_STATE_KEY) if isinstance(meta, dict) else None
 
 
-def _copy_or_share(value: Any) -> Any:
+def _copy_or_share(value: Any, memo: dict[int, Any] | None = None) -> Any:
     """A deep copy of ``value``, or ``value`` itself if it cannot be copied (as in 0.3)."""
     try:
         try:
-            return copy.deepcopy(value)
+            return copy.deepcopy(value, memo)
         except RecursionError:
             return _copy_nested(value)
     except Exception:

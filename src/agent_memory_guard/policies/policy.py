@@ -154,7 +154,7 @@ class Policy:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Policy:
-        if not isinstance(data, Mapping):
+        if not isinstance(data, Mapping) and not hasattr(data, "get"):
             raise ValueError(f"A policy must be a mapping, not {type(data).__name__}")
         _check_fields(data)
         rules = [_parse_rule(r) for r in data.get("rules", [])]
@@ -380,14 +380,14 @@ def load_policy(source: str | Path | dict[str, Any]) -> Policy:
         return Policy.from_dict(source)
     if isinstance(source, Path):
         data = yaml.safe_load(source.read_text(encoding="utf-8"))
-        return Policy.from_dict(data or {})
+        return Policy.from_dict({} if data is None else data)
     text = str(source)
     candidate = Path(text)
     if candidate.exists() and candidate.is_file():
       data = yaml.safe_load(candidate.read_text(encoding="utf-8"))
     else:
         data = yaml.safe_load(text)
-    return Policy.from_dict(data or {})
+    return Policy.from_dict({} if data is None else data)
 
 
 
@@ -455,7 +455,7 @@ def _check_fields(data: dict[str, Any]) -> None:
         )
     unknown_top = sorted(str(k) for k in data if k not in _KNOWN_TOP_FIELDS)
     for raw in data.get("rules", []) or []:
-        if not isinstance(raw, dict):
+        if not isinstance(raw, Mapping):
             continue
         name = raw.get("name", "?")
         access_fields = sorted(str(k) for k in raw if _is_access_field(k, _ACCESS_RULE_FIELDS))

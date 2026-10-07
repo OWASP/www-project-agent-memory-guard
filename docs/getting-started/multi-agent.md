@@ -50,7 +50,8 @@ the key, and before the store is touched. Every stage must pass:
    also needs its class writers.
 
 If you name no `admins`, nobody may snapshot, roll back or retire, or write,
-delete or promote POLICY and VERIFIED_PREFERENCE memory. To let code that calls
+delete or promote POLICY and VERIFIED_PREFERENCE memory, unless `class_writers`
+names someone for that class. To let code that calls
 the guard without an agent identity do so, as in 0.3, add `"<anonymous>"` to
 `admins`. Code that
 loses its agent identity (see below) then gets those rights too, so prefer
@@ -81,7 +82,10 @@ operation, the usual detectors and content rules run as before.
     - A `with` statement in an ordinary function belongs to that function, even
       when a generator further up the stack called it (a streaming view, or a
       framework loop such as LangGraph's `stream()`), so tasks and threads it
-      starts get its identity.
+      starts get its identity. That holds when the `with` names the handle or a
+      `@contextmanager` whose own `with` enters it. A block entered through
+      `ExitStack` or an explicit `__enter__()` call can outlive the `with`, so
+      it counts as the generator's (below).
     - When a generator pauses at a `yield` inside the block, its caller keeps
       its own identity, so two agents' streams can interleave safely. The
       generator's own code keeps the block's identity wherever it is resumed,
@@ -159,10 +163,10 @@ belongs to nobody, so it is denied.
 - **Adapters.** Framework adapters don't pass the agent yet; wrap each agent's
   step in `with guard.as_agent(...)`. Some adapter paths read the backing store
   directly, so access rules don't cover them: CrewAI `GuardedMemory.search()`,
-  LlamaIndex `get_messages()` and `delete_messages()`, and LangChain index
-  reads. Use the guard or a handle directly for anything access rules must
-  protect. LlamaIndex `delete_message()` raises `AccessDenied` and leaves the
-  backing store alone when the agent may not delete the message.
+  LlamaIndex `get_messages()` and LangChain index reads. Use the guard or a
+  handle directly for anything access rules must protect. LlamaIndex
+  `delete_message()` and `delete_messages()` raise `AccessDenied` and leave the
+  backing store alone when the agent may not delete the messages.
 - **Callbacks run under the guard's lock.** With access rules, every operation
   except a read holds the guard's lock while detectors, event handlers, store
   methods and the `retire_if()` predicate run. They must not wait on another
@@ -177,6 +181,11 @@ belongs to nobody, so it is denied.
   3.10, a stream paused inside a block is never freed if it sits in a reference
   cycle (for example `self.stream = self._run()`), so its `finally` never runs.
   Close streams you stop early with `stream.close()`.
+- **Context managers that hide how they enter a handle.** An `__enter__` that
+  is not Python code (such as a `functools.partial` of the handle's `__enter__`),
+  or a `@contextmanager` that yields twice or ignores `close()`, can leave a
+  block open after its `with` ends, and the agent's identity then applies to the
+  code after it. Enter handles with a plain `with` inside your context managers.
 - **YAML.** Access rules are Python-only for now. A YAML policy with `access:`,
   `principals:` or `agents:`, or a rule with fields such as `agents:` or
   `writers:`, fails to load instead of being silently ignored. Other unknown

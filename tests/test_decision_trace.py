@@ -357,3 +357,28 @@ def test_each_event_of_a_retire_carries_the_opening_steps_and_its_own():
     # Later events do not repeat the earlier ones, so traces do not grow with the count.
     assert max(len(t) for t in traces[1:]) < len(traces[0]) + 2
     assert len(g.last_trace()) > 40  # the operation's whole trace is still there
+
+
+class BrokenDetector:
+    name = "broken"
+
+    def inspect(self, key, value, *, operation):
+        raise RuntimeError("boom")
+
+
+def test_a_block_event_carries_every_step_even_after_an_earlier_event():
+    # The broken detector logs its own event first; the block event must still
+    # show the detector that found the injection.
+    from agent_memory_guard.detectors import PromptInjectionDetector
+
+    g = MemoryGuard(
+        policy=Policy.strict(), trace=True, snapshot_on_block=False,
+        detectors=[PromptInjectionDetector(), BrokenDetector()],
+    )
+    with pytest.raises(PolicyViolation):
+        g.write("notes.x", INJECTION)
+    assert len(g.events) >= 2
+    block = [e for e in g.events if e.action == Action.BLOCK][-1]
+    steps = [(s["stage"], s["detail"]) for s in block.metadata["trace"]]
+    assert ("detector", "prompt_injection") in steps
+    assert steps[0][0] == "identity"

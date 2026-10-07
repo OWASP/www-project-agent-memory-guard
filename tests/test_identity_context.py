@@ -11,6 +11,7 @@ import gc
 import subprocess
 import sys
 import textwrap
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -626,6 +627,154 @@ def test_a_block_a_helper_enters_for_a_generator_stays_the_generators():
     assert acting_as(g) is None
 
 
+def test_a_block_a_context_manager_leaves_open_stays_the_generators():
+    # A helper's `with` on a @contextmanager is not enough: a context manager
+    # that enters the handle any other way can leave the block open after it.
+    g = plan_guard()
+    worker = g.as_agent("worker")
+
+    @contextlib.contextmanager
+    def join(stack):  # puts the block on the stream's own ExitStack
+        stack.enter_context(worker)
+        yield
+
+    @contextlib.contextmanager
+    def scope():  # the ExitStack pop_all() hand-over idiom
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(worker)
+            yield stack
+
+    @contextlib.contextmanager
+    def begin():  # enters the handle by hand and leaves it open
+        worker.__enter__()
+        yield
+
+    @contextlib.contextmanager
+    def inner():
+        with worker:
+            yield
+
+    @contextlib.contextmanager
+    def outer(stack):  # puts a `with`-style context manager on the stream's stack
+        stack.enter_context(inner())
+        yield
+
+    def setup_join(stack):
+        with join(stack):
+            pass
+
+    def setup_scope(stack):
+        with scope() as kept:
+            stack.enter_context(kept.pop_all())
+
+    def setup_begin(stack):
+        with begin():
+            pass
+        stack.callback(worker.__exit__, None, None, None)
+
+    def setup_outer(stack):
+        with outer(stack):
+            pass
+
+    def stream(setup):
+        with contextlib.ExitStack() as stack:
+            setup(stack)
+            yield acting_as(g, "notes.a")
+            yield acting_as(g, "notes.b")
+
+    seen = []
+    for setup in (setup_join, setup_scope, setup_begin, setup_outer):
+        it = stream(setup)
+        assert next(it) == "worker"
+        seen.append(acting_as(g, "notes.caller"))
+        ctx = contextvars.copy_context()
+        with ThreadPoolExecutor(1) as pool:
+            seen.append(pool.submit(ctx.run, acting_as, g, "notes.thread").result())
+        assert next(it) == "worker"
+        it.close()
+    assert seen == [None] * 8
+    assert acting_as(g) is None
+
+
+def test_the_newest_block_wins_under_a_generator_or_coroutine():
+    # A supervisor step drops to the worker for a tool. The worker's block is
+    # entered through ExitStack or by hand, so it is registered under the
+    # generator or coroutine further up, yet it is newer and must apply.
+    g = plan_guard()
+    supervisor, worker = g.as_agent("supervisor"), g.as_agent("worker")
+
+    def tool():
+        try:
+            g.write("plan.step1", "rewritten by the tool")
+        except AccessDenied as exc:
+            return exc.principal
+        return "wrote the plan"
+
+    def step_exit_stack():
+        with supervisor:
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(worker)
+                return tool()
+
+    def step_by_hand():
+        with supervisor:
+            worker.__enter__()
+            try:
+                return tool()
+            finally:
+                worker.__exit__(None, None, None)
+
+    def stream(step):
+        with g.as_agent("orchestrator"):
+            yield step()
+
+    async def handler(step):
+        with g.as_agent("orchestrator"):
+            return step()
+
+    for step in (step_exit_stack, step_by_hand):
+        assert step() == "worker"
+        it = stream(step)
+        assert next(it) == "worker"
+        it.close()
+        assert asyncio.run(handler(step)) == "worker"
+    assert g.read("plan.step1") is None
+    assert acting_as(g) is None
+
+
+def test_a_stream_whose_block_ends_inside_another_block_ends_its_own():
+    g = plan_guard()
+    worker = g.as_agent("worker")
+
+    def stream():
+        with worker:
+            yield "started"
+        yield acting_as(g, "notes.a")
+        yield acting_as(g, "notes.b")
+
+    it = stream()
+    assert contextvars.copy_context().run(next, it) == "started"
+    ready, done = threading.Event(), threading.Event()
+
+    def elsewhere():  # the same agent's block, open in another thread
+        with worker:
+            ready.set()
+            done.wait()
+
+    thread = threading.Thread(target=elsewhere)
+    thread.start()
+    ready.wait()
+    try:
+        with worker:
+            assert next(it) == "worker"  # the stream's block ended; this one applies
+            assert acting_as(g) == "worker"
+        assert acting_as(g) is None
+        assert next(it) is None  # resumed by an anonymous caller
+    finally:
+        done.set()
+        thread.join()
+
+
 # ---- blocks the garbage collector ends -----------------------------------------
 
 GC_STREAMS = textwrap.dedent('''
@@ -699,6 +848,41 @@ def test_a_block_the_garbage_collector_ends_stops_applying():
     with g.as_agent("worker"):  # the next block tidies the registry
         pass
     assert g._guard_id not in identity._ANCHORED
+
+
+GC_FIRST_BLOCK = textwrap.dedent('''
+    import gc
+
+    from agent_memory_guard import MemoryGuard
+
+    handle = MemoryGuard().as_agent("worker")
+    errors = []
+
+    def stream():
+        try:
+            yield
+        finally:
+            try:
+                with handle:
+                    pass
+            except RuntimeError as exc:
+                errors.append(exc)
+
+    box = [stream()]
+    box.append(box)  # a reference cycle, so only the collector frees it
+    next(box[0])
+    del box
+    gc.collect()
+    print(len(errors))
+''')
+
+
+def test_even_a_programs_first_block_cannot_open_during_garbage_collection():
+    done = subprocess.run(
+        [sys.executable, "-c", GC_FIRST_BLOCK], capture_output=True, text=True, timeout=60
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.split() == ["1"]
 
 
 def test_cleanup_the_garbage_collector_runs_cannot_open_a_block(monkeypatch):

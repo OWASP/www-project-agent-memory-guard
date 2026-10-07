@@ -1,4 +1,6 @@
 import textwrap
+from collections import UserDict
+from types import MappingProxyType
 
 import pytest
 
@@ -122,7 +124,9 @@ def test_policy_without_a_protected_key_rule_still_loads_with_no_keys():
     assert [r.name for r in policy.rules] == ["block_injection"]
 
 
-@pytest.mark.parametrize("doc", ["- a: 1\n", "42\n", "just some text\n"])
+@pytest.mark.parametrize(
+    "doc", ["- a: 1\n", "42\n", "just some text\n", "[]\n", "0\n", "false\n", "''\n"]
+)
 def test_a_policy_document_that_is_not_a_mapping_is_rejected(doc):
     with pytest.raises(ValueError, match="must be a mapping"):
         load_policy(doc)
@@ -131,3 +135,29 @@ def test_a_policy_document_that_is_not_a_mapping_is_rejected(doc):
 def test_from_dict_rejects_a_non_mapping():
     with pytest.raises(ValueError, match="must be a mapping, not NoneType"):
         Policy.from_dict(None)
+
+
+def test_an_empty_policy_document_loads_the_default_policy():
+    assert load_policy("") == Policy.from_dict({})
+
+
+class DictLike:
+    def __init__(self, data):
+        self._data = data
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+    def __iter__(self):
+        return iter(self._data)
+
+
+def test_from_dict_accepts_dict_like_objects_as_0_3_did():
+    assert Policy.from_dict(DictLike({"default_action": "block"})).default_action == Action.BLOCK
+
+
+@pytest.mark.parametrize("wrap", [UserDict, MappingProxyType])
+def test_per_agent_fields_are_rejected_on_rules_given_as_any_mapping(wrap):
+    rule = wrap({"name": "r", "detector": "prompt_injection", "writers": ["supervisor"]})
+    with pytest.raises(ValueError, match="per-agent field"):
+        Policy.from_dict({"rules": [rule]})

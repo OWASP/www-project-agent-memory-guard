@@ -4,7 +4,9 @@ from typing import Any
 
 
 def _rebuild(cls: type[BaseException], args: tuple[Any, ...]) -> BaseException:
-    return cls.__new__(cls, *args)
+    exc = cls.__new__(cls, *args)
+    exc.args = args  # some bases, such as OSError, set args in __init__
+    return exc
 
 
 class MemoryGuardError(Exception):

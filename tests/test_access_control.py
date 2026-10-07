@@ -829,3 +829,58 @@ def test_other_guard_errors_survive_pickling():
         clone = pickle.loads(pickle.dumps(exc))
         assert type(clone) is type(exc)
         assert (clone.args, clone.__dict__) == (exc.args, exc.__dict__)
+
+
+class StoreDown(PolicyViolation, ConnectionError):
+    """An application's own error type that is also an OSError."""
+
+
+def test_a_guard_error_mixed_with_a_builtin_error_keeps_its_message_when_pickled():
+    clone = pickle.loads(pickle.dumps(StoreDown("redis unreachable", key="k")))
+    assert type(clone) is StoreDown
+    assert clone.args == ("redis unreachable",)
+    assert (str(clone), clone.key) == ("redis unreachable", "k")
+
+
+class FakeChatStore:
+    """Just enough of a LlamaIndex chat store, so this runs without llama-index."""
+
+    def __init__(self):
+        self.d = {}
+
+    def add_message(self, key, message, idx=None):
+        self.d.setdefault(key, []).append(message)
+
+    def get_messages(self, key):
+        return list(self.d.get(key, []))
+
+    def delete_messages(self, key):
+        return self.d.pop(key, None)
+
+
+@pytest.mark.parametrize("default", ["allow", "deny"])
+def test_llamaindex_delete_messages_follows_the_access_rules(default):
+    from agent_memory_guard.integrations.llamaindex import GuardedChatStore
+
+    policy = Policy.strict().with_access(
+        AccessRule(
+            "chat", keys=["llamaindex_messages.{owner}.*"], writers=["{owner}"], readers=["{owner}"]
+        ),
+        default=default,
+    )
+    guard = MemoryGuard(policy=policy)
+    backing = FakeChatStore()
+    store = GuardedChatStore(store=backing, guard=guard)
+    with guard.as_agent("researcher"):
+        store.add_message("researcher", "m0")
+        store.add_message("researcher", "m1")
+    with guard.as_agent("writer"), pytest.raises(AccessDenied):
+        store.delete_messages("researcher")
+    assert backing.get_messages("researcher") == ["m0", "m1"]
+    assert guard.read("llamaindex_messages.researcher.0", principal="researcher") == "m0"
+    with guard.as_agent("researcher"):
+        assert store.delete_messages("researcher") == ["m0", "m1"]
+        # The guard's entries for the messages go too.
+        assert guard.read("llamaindex_messages.researcher.0") is None
+        assert guard.read("llamaindex_messages.researcher.1") is None
+    assert backing.get_messages("researcher") == []
