@@ -14,26 +14,46 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-07
+
 ### Added
 
 - **Per-agent access control.** `Policy.with_access(AccessRule(...))` says which
   agents may read and write which keys, for example "only the supervisor may change
   `plan.*`". The guard checks it before any detector runs, before the existence check
   on read, and before the store is touched. A denial raises `AccessDenied` (a
-  `PolicyViolation`), logs an `access_control` event and takes no snapshot. Policies
-  without access rules behave as before.
+  `PolicyViolation`), logs an `access_control` event and takes no snapshot. Keys no
+  rule covers are denied unless you pass `default="allow"`. Policies without access
+  rules behave as before.
 - **Agent identity.** `guard.as_agent("id")` returns an `AgentHandle` bound to one
   agent; `write`, `read`, `delete`, `promote`, `snapshot`, `rollback` and `retire_if`
   also take `principal=`. Inside `with guard.as_agent("id"):` plain calls on that
   guard run as the agent; a generator paused inside the block does not pass the
   identity to its caller, and its own code keeps the identity wherever it is
   resumed. A `with` statement in an ordinary function belongs to that function, so
-  the tasks and threads it starts get its identity even when a generator further up
-  the stack called it. Tasks and threads started while a generator holds a block
-  open start anonymous. A handle's `snapshot()` and `rollback()` return only the
-  snapshot id. Every `SecurityEvent` has a new `principal` field.
+  the asyncio tasks it starts, and the threads it starts with
+  `contextvars.copy_context()` (as `asyncio.to_thread` does), get its identity even
+  when a generator further up the stack called it. Other new threads, such as a
+  plain `threading.Thread`, a thread pool or `loop.run_in_executor`, start
+  anonymous, except on free-threaded Python (3.14t) or with
+  `-X thread_inherit_context=1`, where a thread started inside the block keeps its
+  identity for its whole life. Tasks and threads started while a generator holds a
+  block open start anonymous. `with_access(ambient_identity=False)` turns `with`
+  blocks off, so only handles and `principal=` carry an identity. A handle's
+  `snapshot()` and `rollback()` return only the snapshot id. Every `SecurityEvent`
+  has a new `principal` field. When an identity is set and `source` is left at its
+  default, write events record the agent id in `metadata["source"]`, and
+  `promote()` records it as `verified_by` unless one is passed.
 - **Private namespaces.** A key pattern such as `agents.{owner}.*` with
   `writers=["{owner}"]` gives every agent its own space.
+- **Agent registry and roles.** `with_access(principals={"id": ["role", ...]})`
+  declares which agents exist and gives them roles, which access rules can name as
+  `"role:<name>"`. With a registry, `as_agent()` raises the new `UnknownPrincipal`
+  for an undeclared id (a `LookupError`, not a `MemoryGuardError`), and
+  `principal=` with such an id raises `AccessDenied`. A rule that names an
+  undeclared id, or a `role:` selector without a registry, raises `ValueError`.
+  Agent ids are 1 to 64 characters of letters, digits, `_` and `-`, and cannot
+  start with `-`; other ids raise `ValueError`, or `TypeError` if not a string.
 - **Class gate and admins.** With access rules, only `admins` may `snapshot()`,
   `rollback()` and `retire_if()`, and only the admins may write, delete or promote
   POLICY and VERIFIED_PREFERENCE memory unless `class_writers` names others for a
@@ -43,7 +63,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the guard without an agent identity, as in 0.3.
 - **Values are copied with access rules.** The guard stores a deep copy of each
   written value and returns a deep copy on read, so an agent cannot change memory it
-  may only read by editing the object it got back.
+  may only read by editing the object it got back. Values must therefore be
+  deep-copyable: writing or reading one that is not, such as a lock or a client
+  object, raises `TypeError`.
 - **Looking inside a decision.** `guard.explain(...)` dry-runs an access decision
   (`snapshot_id=` picks the snapshot for `rollback`). `MemoryGuard(trace=True)`
   records each step of every operation (identity, access rules, each detector, the
@@ -52,15 +74,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `metadata["trace"]`, and `format_trace()` prints them. When one operation logs
   several events (`retire_if()`), each carries the opening steps and the steps
   since the previous event.
+- `guard.written_by(key)` returns the agent whose write last committed `key`, or
+  `None` if that write was anonymous or the writer is unknown. Deletes and
+  `retire_if()` clear it; snapshots record it and `rollback()` restores it.
 - `Policy.evaluate()` returns the action and the name of the deciding rule.
 
 ### Changed
 
-- **YAML policies with per-agent fields now fail to load.** 0.3 silently ignored
+- **Policies with per-agent fields now fail to load.** 0.3 silently ignored
   fields such as `agents: [supervisor]` on a rule, which let every agent through.
-  Rule fields `agent(s)`, `writer(s)`, `reader(s)`, `principal(s)` and top-level
-  `access`, `principals` or `agents` sections now raise `ValueError`. Other unknown
-  fields give a `PolicyWarning` and are still ignored.
+  In `load_policy()` and `Policy.from_dict()`, from YAML or a dict, the rule fields
+  `access`, `agent(s)`, `writer(s)`, `reader(s)`, `principal(s)` and top-level
+  `access`, `principals` or `agents` sections, in any letter case, now raise
+  `ValueError`. Other unknown fields give a `PolicyWarning` and are still ignored.
 - `rollback()` now restores class labels and origin tasks saved with the snapshot,
   instead of keeping the labels from before the rollback. This applies with or
   without access rules. Snapshots record them, with each captured key's last
@@ -79,7 +105,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Without access rules, each operation now checks for an agent identity. A write
   plus a read costs about 3 to 5 microseconds more than in 0.3.3: about 10 to 15% on
   a tiny value and 2 to 5% on a typical one (Python 3.12 and 3.13).
-- CI runs on Python 3.13 and 3.14.
+- Python 3.14 is now supported (a trove classifier is added). CI now also tests 3.13
+  and 3.14, so it covers 3.9 to 3.14.
 
 ### Fixed
 
@@ -87,8 +114,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   copied, so they reach the caller from a process pool instead of breaking it.
 - The LlamaIndex adapter's `delete_message()` and `delete_messages()` raise
   `AccessDenied` instead of deleting from the backing store when the agent may
-  not delete the messages. `delete_messages()` also deletes each message's guard
-  entry, which 0.3 left behind.
+  not delete the messages. `delete_messages()` also deletes the guard entries at
+  the conversation's current message positions; 0.3 deleted none of them. Entries
+  at higher positions can remain: one left by a message the guard dropped, or by
+  an earlier `delete_message()` or a shorter `set_messages()`.
 
 ## [0.3.3] - 2026-10-02
 
@@ -345,6 +374,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [#87]: https://github.com/OWASP/www-project-agent-memory-guard/issues/87
 [#93]: https://github.com/OWASP/www-project-agent-memory-guard/pull/93
 [#94]: https://github.com/OWASP/www-project-agent-memory-guard/pull/94
+[0.4.0]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.0...v0.3.1

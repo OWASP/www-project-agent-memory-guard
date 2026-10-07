@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run OWASP Agent Memory Guard
-        uses: OWASP/www-project-agent-memory-guard@v0.3.3
+        uses: OWASP/www-project-agent-memory-guard@v0.4.0
         with:
           scan-path: '.'
           fail-on-findings: 'true'
@@ -65,7 +65,7 @@ When using `output-format: sarif`, findings appear directly in the **Security** 
 ### Scan only specific directories
 
 ```yaml
-- uses: OWASP/www-project-agent-memory-guard@v0.3.3
+- uses: OWASP/www-project-agent-memory-guard@v0.4.0
   with:
     scan-path: 'src/agents'
     include-patterns: '**/*.py'
@@ -74,7 +74,7 @@ When using `output-format: sarif`, findings appear directly in the **Security** 
 ### Non-blocking scan (report only)
 
 ```yaml
-- uses: OWASP/www-project-agent-memory-guard@v0.3.3
+- uses: OWASP/www-project-agent-memory-guard@v0.4.0
   with:
     fail-on-findings: 'false'
     output-format: 'json'
@@ -83,7 +83,7 @@ When using `output-format: sarif`, findings appear directly in the **Security** 
 ### Critical-only blocking
 
 ```yaml
-- uses: OWASP/www-project-agent-memory-guard@v0.3.3
+- uses: OWASP/www-project-agent-memory-guard@v0.4.0
   with:
     min-severity: 'critical'
     fail-on-findings: 'true'
