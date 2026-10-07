@@ -177,10 +177,15 @@ belongs to nobody, so it is denied.
   copy elsewhere, or raise `SnapshotStore(max_snapshots=...)`.
 - **Cleanup run by the garbage collector.** A stream's `finally` code that runs
   while the garbage collector closes the stream cannot open a `with` block (it
-  raises `RuntimeError`); call the handle's methods there. On Python 3.9 and
-  3.10, a stream paused inside a block is never freed if it sits in a reference
-  cycle (for example `self.stream = self._run()`), so its `finally` never runs.
-  Close streams you stop early with `stream.close()`.
+  raises `RuntimeError`); call the handle's methods there. That code keeps the
+  stream's own block, if it is inside one, and is otherwise anonymous, whatever
+  code the collection interrupted. asyncio closes an abandoned async generator
+  later, in a task that copies the context where the collector found it, so its
+  cleanup can get a block open there; one collected after its event loop has
+  closed never ends its block. On Python 3.9 and 3.10, a stream paused inside a
+  block is never freed if it sits in a reference cycle (for example
+  `self.stream = self._run()`), so its `finally` never runs. Close streams you
+  stop early with `stream.close()` or `await stream.aclose()`.
 - **Context managers that hide how they enter a handle.** An `__enter__` that
   is not Python code (such as a `functools.partial` of the handle's `__enter__`),
   or a `@contextmanager` that yields twice or ignores `close()`, can leave a

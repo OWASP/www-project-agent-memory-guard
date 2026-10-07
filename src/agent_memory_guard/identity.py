@@ -186,6 +186,10 @@ class _ThreadState(threading.local):
     # paused generators and coroutines at whatever point it was triggered, which
     # can be inside the bookkeeping below.
     gc = False
+    # The frame that was running when this thread's collection started. Code
+    # the collector runs (finalizers) sits on top of it, but must not take its
+    # identity: the collection could have started anywhere.
+    gc_frame: FrameType | None = None
     # True while this thread holds _LOCK or is setting _AMBIENT.
     busy = False
 
@@ -198,13 +202,22 @@ _DEFERRED: list[_Entry] = []
 
 
 def _on_gc(phase: str, info: Mapping[str, Any]) -> None:
-    _STATE.gc = phase == "start"
+    state = _STATE
+    if phase == "start":
+        try:
+            state.gc_frame = sys._getframe(1)
+        except ValueError:  # started with no Python code running
+            state.gc_frame = None
+        state.gc = True
+    else:
+        state.gc = False
+        state.gc_frame = None
 
 
-# Installed at import, so that even the first block a program opens can tell
-# whether the garbage collector is running.
-if _on_gc not in gc.callbacks:
-    gc.callbacks.append(_on_gc)
+def _hook_gc() -> None:
+    """Make sure _on_gc runs, first, so a callback that removes itself cannot skip it."""
+    if _on_gc not in gc.callbacks:
+        gc.callbacks.insert(0, _on_gc)
 
 
 def _unsafe() -> bool:
@@ -213,10 +226,15 @@ def _unsafe() -> bool:
     return state.gc or state.busy
 
 
+# These set busy inside their try and keep `with _LOCK:` short and free of
+# loops (CPython 3.12+ leaves loop back-edges there unprotected), to narrow the
+# windows in which a KeyboardInterrupt could leave busy set or the lock held.
+
+
 def _set_ambient(value: Mapping[int, tuple[_Entry, ...]]) -> None:
     state = _STATE
-    state.busy = True
     try:
+        state.busy = True
         _AMBIENT.set(value)
     finally:
         state.busy = False
@@ -224,8 +242,8 @@ def _set_ambient(value: Mapping[int, tuple[_Entry, ...]]) -> None:
 
 def _register(entry: _Entry) -> None:
     state = _STATE
-    state.busy = True
     try:
+        state.busy = True
         with _LOCK:
             hid = id(entry.handle)
             _BY_HANDLE[hid] = (*_BY_HANDLE.get(hid, ()), entry)
@@ -237,33 +255,35 @@ def _register(entry: _Entry) -> None:
         state.busy = False
 
 
+def _drop(table: dict[int, tuple[_Entry, ...]], key: int, entry: _Entry) -> bool:
+    """Remove ``entry`` from ``table[key]``; True if it was there."""
+    before = table.get(key, ())
+    rest = tuple(e for e in before if e is not entry)
+    if rest:
+        table[key] = rest
+    else:
+        table.pop(key, None)
+    return len(rest) < len(before)
+
+
 def _close(entry: _Entry, *, revoke: bool = False) -> None:
     """End a block. ``revoke`` also ends it in copies of the context."""
     state = _STATE
-    state.busy = True
     try:
+        state.busy = True
         with _LOCK:
             # A generator's block is never inherited, so once it ends it must not
             # make child contexts fail closed either.
             if revoke or entry.kind == "generator":
                 entry.closed = True
-            tables = [(_BY_HANDLE, id(entry.handle))]
-            if entry.key is not None:
-                tables.append((_BY_ANCHOR, entry.key))
-            for table, key in tables:
-                before = table.get(key, ())
-                rest = tuple(e for e in before if e is not entry)
-                if rest:
-                    table[key] = rest
+            _drop(_BY_HANDLE, id(entry.handle), entry)
+            if entry.key is not None and _drop(_BY_ANCHOR, entry.key, entry):
+                gid = entry.ctx.guard_id
+                left = _ANCHORED.get(gid, 1) - 1
+                if left > 0:
+                    _ANCHORED[gid] = left
                 else:
-                    table.pop(key, None)
-                if table is _BY_ANCHOR and len(rest) < len(before):
-                    gid = entry.ctx.guard_id
-                    left = _ANCHORED.get(gid, 1) - 1
-                    if left > 0:
-                        _ANCHORED[gid] = left
-                    else:
-                        _ANCHORED.pop(gid, None)
+                    _ANCHORED.pop(gid, None)
             entry.anchor = entry.owner = None  # drop the frame references
     finally:
         state.busy = False
@@ -290,7 +310,9 @@ def _prune(guard_id: int) -> None:
     _set_ambient(updated)
 
 
-def _open_on_stack(guard_id: int, frame: FrameType | None) -> _Entry | None:
+def _open_on_stack(
+    guard_id: int, frame: FrameType | None, stop: FrameType | None = None
+) -> _Entry | None:
     """The running block of this guard whose anchor frame is on this stack.
 
     That is the newest open block registered under the frames from here up to
@@ -298,11 +320,11 @@ def _open_on_stack(guard_id: int, frame: FrameType | None) -> _Entry | None:
     generator holds applies while that generator runs, however old it is, but
     below it the newest block wins, wherever it is registered: a block entered
     through ExitStack is registered under the generator, not the function that
-    entered it.
+    entered it. The walk ends before ``stop``.
     """
     by_anchor = _BY_ANCHOR
     best: _Entry | None = None
-    while frame is not None:
+    while frame is not None and frame is not stop:
         entries = by_anchor.get(id(frame))
         if entries:
             for entry in reversed(entries):
@@ -451,6 +473,14 @@ def ambient_identity_possible(guard_id: int) -> bool:
 
 def ambient_for(guard_id: int) -> ActingContext | None:
     """The identity of the innermost running ``with handle:`` block for this guard."""
+    if _DEFERRED and not _unsafe():
+        _drain_deferred()  # so ended blocks stop keeping guards off the fast path
+    state = _STATE
+    if state.gc:
+        # Run by the garbage collector: only blocks of the code being finalized
+        # apply, never those of the code that happened to trigger the collection.
+        hit = _open_on_stack(guard_id, sys._getframe(1), state.gc_frame)
+        return None if hit is None else hit.ctx
     # A block whose own generator or coroutine frame is on this stack applies,
     # whichever thread, task or context resumed that frame.
     if guard_id in _ANCHORED:
@@ -553,6 +583,7 @@ class AgentHandle:
     def __init__(self, guard: MemoryGuard, principal: str) -> None:
         self._guard = guard
         self._pid = _HandleId(check_id(principal))
+        _hook_gc()  # before any block, so even the first can tell a collection is running
 
     @property
     def principal(self) -> str:
@@ -602,6 +633,7 @@ class AgentHandle:
                 "collection, such as the finally block of a stream the collector closes; "
                 "call the handle's methods there instead"
             )
+        _hook_gc()  # again, in case gc.callbacks was cleared
         if _DEFERRED:
             _drain_deferred()
         gid = self._guard._guard_id
@@ -638,9 +670,14 @@ class AgentHandle:
         current = _AMBIENT.get()
         entries = current.get(gid, ())
         mine = [i for i, e in enumerate(entries) if e.handle is self and not e.closed]
-        owner = _past_machinery(caller)
+        if self._open_under(caller) is not None:
+            # Its own frame, even when the collector or a context manager's
+            # driver resumed it and so it looks like context-manager machinery.
+            owner: FrameType | None = caller
+            anchor: FrameType | None = caller
+        else:
+            owner, anchor = _past_machinery(caller), _anchor(caller)
         candidates = [i for i in mine if owner is not None and entries[i].owner is owner]
-        anchor = _anchor(caller)
         if not candidates:
             thread, task = threading.get_ident(), _current_task()
             here = [
@@ -676,6 +713,13 @@ class AgentHandle:
             "the block has been ended everywhere"
         )
 
+    def _open_under(self, frame: FrameType) -> _Entry | None:
+        """This handle's newest open block registered under ``frame``."""
+        for entry in reversed(_BY_ANCHOR.get(id(frame), ())):
+            if entry.handle is self and entry.anchor is frame and not entry.closed:
+                return entry
+        return None
+
     def _end_by_frame(self, anchor: FrameType) -> bool:
         """End this handle's block registered under ``anchor``, if there is one.
 
@@ -683,27 +727,19 @@ class AgentHandle:
         thread, task or context. The entering context's copy is now stale, so
         it is ended there too.
         """
-        found = [
-            e for e in _BY_ANCHOR.get(id(anchor), ())
-            if e.handle is self and e.anchor is anchor and not e.closed
-        ]
-        if not found:
+        found = self._open_under(anchor)
+        if found is None:
             return False
-        _close(found[-1], revoke=True)
+        _close(found, revoke=True)
         return True
 
     def _end_later(self, caller: FrameType) -> None:
         """End this handle's block without taking _LOCK or setting the context."""
-        found = None
-        anchor = _anchor(caller)
-        if anchor is not None:
-            found = next(
-                (
-                    e for e in reversed(_BY_ANCHOR.get(id(anchor), ()))
-                    if e.handle is self and e.anchor is anchor and not e.closed
-                ),
-                None,
-            )
+        found = self._open_under(caller)  # its own frame, however it was resumed
+        if found is None:
+            anchor = _anchor(caller)
+            if anchor is not None:
+                found = self._open_under(anchor)
         blocks = _BY_HANDLE.get(id(self), ())
         owner = _past_machinery(caller)
         if found is None and owner is not None:

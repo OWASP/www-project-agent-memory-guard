@@ -845,9 +845,84 @@ def test_a_block_the_garbage_collector_ends_stops_applying():
     assert closed == [True]
     with pytest.raises(AccessDenied, match="<anonymous>"):
         g.write("plan.step1", "the stream's block has ended")
-    with g.as_agent("worker"):  # the next block tidies the registry
-        pass
+    assert not identity._DEFERRED  # tidied by that call, so the guard is fast again
     assert g._guard_id not in identity._ANCHORED
+
+
+def test_cleanup_the_collector_runs_does_not_take_the_identity_it_interrupted():
+    # The collector finalizes an anonymous tool's stream while the supervisor's
+    # block is running; the cleanup code must not run as the supervisor.
+    g = plan_guard()
+    seen = []
+
+    def tool_stream(box):
+        try:
+            yield
+        finally:
+            try:
+                g.write("plan.step1", "rewritten during cleanup")
+                seen.append(g.written_by("plan.step1"))
+            except AccessDenied as exc:
+                seen.append(exc.principal)
+
+    with g.as_agent("supervisor"):
+        box = []
+        it = tool_stream(box)
+        box.append(it)  # only the collector can free it
+        next(it)
+        del it, box
+        gc.collect()
+        assert acting_as(g) == "supervisor"
+    assert seen == [None]
+    assert g.read("plan.step1") is None
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="3.9 and 3.10 never free a paused stream in a cycle"
+)
+def test_cleanup_the_collector_runs_inside_a_streams_block_keeps_that_block():
+    g = plan_guard()
+    seen = []
+
+    def stream(box):
+        with g.as_agent("worker"):
+            try:
+                yield
+            finally:
+                seen.append(acting_as(g, "notes.cleanup"))
+
+    with g.as_agent("supervisor"):
+        box = []
+        it = stream(box)
+        box.append(it)
+        next(it)
+        del it, box
+        gc.collect()
+    assert seen == ["worker"]
+
+
+def test_a_stream_closed_inside_a_context_managers_exit_ends_its_own_block():
+    # The stream is freed, and closed, while contextlib's __exit__ is running,
+    # so its frame looks like context-manager machinery; it must still end its
+    # own block, not the caller's block of the same agent.
+    g = plan_guard()
+    worker = g.as_agent("worker")
+
+    def stream():
+        with worker:
+            yield
+
+    @contextlib.contextmanager
+    def holding():
+        it = stream()
+        next(it)
+        yield  # `it` goes, and the stream closes, when this generator finishes
+
+    with worker:
+        with holding():
+            pass
+        assert acting_as(g) == "worker"
+    assert acting_as(g) is None
 
 
 GC_FIRST_BLOCK = textwrap.dedent('''
@@ -883,6 +958,42 @@ def test_even_a_programs_first_block_cannot_open_during_garbage_collection():
     )
     assert done.returncode == 0, done.stderr[-2000:]
     assert done.stdout.split() == ["1"]
+
+
+GC_CALLBACK_ORDER = textwrap.dedent('''
+    import gc
+
+    gc.disable()  # only the collection below runs
+
+    def one_shot(phase, info):  # a callback that removes itself, registered first
+        if phase == "start":
+            gc.callbacks.remove(one_shot)
+
+    gc.callbacks.append(one_shot)
+
+    from agent_memory_guard import MemoryGuard, identity
+
+    MemoryGuard().as_agent("worker")
+    seen = []
+
+    class Garbage:
+        def __del__(self):
+            seen.append(identity._STATE.gc)
+
+    garbage = Garbage()
+    garbage.me = garbage
+    del garbage
+    gc.collect()
+    print(seen, identity._STATE.gc)
+''')
+
+
+def test_a_gc_callback_that_removes_itself_does_not_hide_a_collection():
+    done = subprocess.run(
+        [sys.executable, "-c", GC_CALLBACK_ORDER], capture_output=True, text=True, timeout=60
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.split() == ["[True]", "False"]
 
 
 def test_cleanup_the_garbage_collector_runs_cannot_open_a_block(monkeypatch):
