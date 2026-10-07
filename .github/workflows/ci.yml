@@ -45,6 +45,15 @@ jobs:
           coverage report
           coverage xml
 
+      - name: Install the OpenClaw and Hermes adapter
+        run: |
+          pip install -e integrations/openclaw-agent-memory-guard
+
+      - name: Lint and test the OpenClaw and Hermes adapter
+        run: |
+          ruff check integrations/openclaw-agent-memory-guard
+          python -m pytest integrations/openclaw-agent-memory-guard/tests -v
+
       - name: Upload coverage report
         if: matrix.python-version == '3.11'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
