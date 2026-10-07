@@ -57,3 +57,22 @@ def test_long_fast_conversation_is_not_quarantined():
         store.add_message("s", ChatMessage(role="user", content=f"note {i} about the launch plan"))
 
     assert len(store.get_messages("s")) == 30
+
+
+def test_a_denied_delete_leaves_the_backing_store_alone():
+    from agent_memory_guard import AccessDenied, AccessRule
+
+    policy = Policy.strict().with_access(
+        AccessRule(
+            "chat", keys=["llamaindex_messages.{owner}.*"], writers=["{owner}"], readers=["{owner}"]
+        ),
+        default="allow",
+    )
+    guard = MemoryGuard(policy=policy)
+    store = GuardedChatStore(store=SimpleChatStore(), guard=guard)
+    with guard.as_agent("researcher"):
+        store.add_message("researcher", ChatMessage(role="user", content="Q3 revenue was 4.2M"))
+    with guard.as_agent("writer"):
+        with pytest.raises(AccessDenied):
+            store.delete_message("researcher", 0)
+    assert [m.content for m in store.get_messages("researcher")] == ["Q3 revenue was 4.2M"]

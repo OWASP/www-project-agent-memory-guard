@@ -3,8 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 
+def _rebuild(cls: type[BaseException], args: tuple[Any, ...]) -> BaseException:
+    return cls.__new__(cls, *args)
+
+
 class MemoryGuardError(Exception):
     """Base exception for Agent Memory Guard."""
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        # Rebuild without calling __init__, whose arguments differ from ``args``,
+        # so these exceptions survive pickling (process pools) and copying.
+        return (_rebuild, (type(self), self.args), self.__dict__)
 
 
 class PolicyViolation(MemoryGuardError):

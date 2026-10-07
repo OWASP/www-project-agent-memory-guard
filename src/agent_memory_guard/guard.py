@@ -38,6 +38,8 @@ from agent_memory_guard.exceptions import (
     UnknownPrincipal,
 )
 from agent_memory_guard.identity import (
+    _AMBIENT,
+    _ANCHORED,
     _LAST_TRACE,
     _OP,
     ActingContext,
@@ -227,13 +229,15 @@ class MemoryGuard:
         cls: MemoryClass | str | None = None,
         target: MemoryClass | str | None = None,
         verified: bool = False,
+        snapshot_id: str | None = None,
     ) -> AccessDecision:
         """Show how access would be decided, without doing anything.
 
         Runs the same checks, in the same order, as the real operation, but emits
         no events, runs no detectors and changes nothing. ``operation`` is one of
-        ``read``, ``write``, ``delete``, ``promote`` (pass ``target=``), ``rollback``,
-        ``retire`` or ``snapshot``. Print ``.explain()`` on the result for the steps.
+        ``read``, ``write``, ``delete``, ``promote`` (pass ``target=``), ``rollback``
+        (pass ``snapshot_id=`` for a snapshot other than the latest), ``retire`` or
+        ``snapshot``. Print ``.explain()`` on the result for the steps.
 
         Content detectors are not part of this answer: an allowed write can still
         be blocked, redacted or quarantined for what it contains.
@@ -260,7 +264,9 @@ class MemoryGuard:
                 via=ctx.via, all_rules=all_rules,
             )
             if operation == "rollback" and decision.allowed:
-                snap = self._snapshots.latest()
+                snap = self._snapshots.get(snapshot_id) if snapshot_id else self._snapshots.latest()
+                if snap is None and snapshot_id:
+                    raise LookupError(f"No snapshot {snapshot_id!r}")
                 if snap is not None:
                     decision = self._rollback_class_check(ctx, snap, decision)
         # Who last wrote a key is read-level information: show it only to agents
@@ -343,7 +349,8 @@ class MemoryGuard:
         ):
             return body(ctx)  # the 0.3 path: nothing to check, attribute or record
         steps: list[TraceStep] | None = [] if self._trace_on else None
-        token = _OP.set(_OpState(self._guard_id, ctx, steps))
+        state = _OpState(self._guard_id, ctx, steps)
+        token = _OP.set(state)
         access = self._access_policy()
         lock = self._lock if access is not None and operation in _LOCKED_OPS else None
         try:
@@ -356,10 +363,12 @@ class MemoryGuard:
                 with lock:
                     if gate is not None:
                         gate(ctx)
+                    state.mark_checked()
                     result = body(ctx)
             else:
                 if gate is not None and access is not None:
                     gate(ctx)
+                state.mark_checked()
                 result = body(ctx)
             if steps is not None:
                 steps.append(TraceStep("result", _describe(operation, result), "done"))
@@ -734,15 +743,16 @@ class MemoryGuard:
             principal is None
             and not self._trace_on
             and _OP.get() is None
-            and not ambient_identity_possible(self._guard_id)
+            and not _AMBIENT.get()
+            and self._guard_id not in _ANCHORED
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
             action = self._write_impl(
                 key, value, source=source, source_class=source_class, source_type=source_type,
                 receipt_uri=receipt_uri, cls=cls, task_id=task_id,
             )
-            if action in (Action.ALLOW, Action.REDACT):
-                self._written_by[key] = None
+            if self._written_by and action in (Action.ALLOW, Action.REDACT):
+                self._written_by.pop(key, None)  # the last write was anonymous
             return action
 
         def gate(ctx: ActingContext) -> None:
@@ -930,7 +940,8 @@ class MemoryGuard:
             principal is None
             and not self._trace_on
             and _OP.get() is None
-            and not ambient_identity_possible(self._guard_id)
+            and not _AMBIENT.get()
+            and self._guard_id not in _ANCHORED
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
             return self._read_impl(key, default, sink=sink)
@@ -1025,11 +1036,13 @@ class MemoryGuard:
             principal is None
             and not self._trace_on
             and _OP.get() is None
-            and not ambient_identity_possible(self._guard_id)
+            and not _AMBIENT.get()
+            and self._guard_id not in _ANCHORED
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
             self._delete_impl(key)
-            self._written_by.pop(key, None)
+            if self._written_by:
+                self._written_by.pop(key, None)
             return
 
         def gate(ctx: ActingContext) -> None:
@@ -1139,8 +1152,9 @@ class MemoryGuard:
         """Capture a point-in-time snapshot of the guarded memory store.
 
         The snapshot also records each key's class label, origin task and last
-        writer, so :meth:`rollback` restores them with the data. When the policy's
-        access rules name ``admins``, only an admin may call it.
+        writer, so :meth:`rollback` restores them with the data. With access rules,
+        only one of the policy's ``admins`` may call it; if the rules name no admins,
+        nobody may (add ``"<anonymous>"`` to ``admins`` for the 0.3 behaviour).
         """
 
         def gate(ctx: ActingContext) -> None:
@@ -1180,7 +1194,7 @@ class MemoryGuard:
             return decision
         principal = ctx.principal
         now = self._classification.export_state()["classes"]
-        state = snap.metadata.get(_STATE_KEY) if isinstance(snap.metadata, dict) else None
+        state = _snapshot_state(snap)
         # A snapshot from before 0.4 leaves labels as they are.
         then = dict(state.get("classes") or {}) if isinstance(state, dict) else now
         def locked(label: str | None) -> MemoryClass | None:
@@ -1244,10 +1258,11 @@ class MemoryGuard:
         else:
             for key in list(self._store.keys()):
                 self._store.delete(key)
-            for key, value in copy.deepcopy(snap.data).items():
-                self._store.set(key, value)
+            # Restore copies, so that editing a restored value cannot change the snapshot.
+            for key, value in snap.data.items():
+                self._store.set(key, _copy_or_share(value))
 
-        state = snap.metadata.get(_STATE_KEY)
+        state = _snapshot_state(snap)
         if isinstance(state, dict):
             self._classification.import_state(state)  # copies into new dicts
             self._written_by = dict(state.get("written_by") or {})
@@ -1372,7 +1387,7 @@ class MemoryGuard:
             principal = state.ctx.principal
             if state.steps is not None:
                 state.steps.append(TraceStep("event", f"{detector} logged", action.value))
-                metadata = {**(metadata or {}), "trace": [s.as_dict() for s in state.steps]}
+                metadata = {**(metadata or {}), "trace": [s.as_dict() for s in state.event_steps()]}
         event = SecurityEvent(
             principal=principal,
             detector=detector,
@@ -1454,6 +1469,23 @@ def _describe(operation: str, result: Any) -> str:
     if operation == "read":
         return "value returned"
     return "completed"
+
+
+def _snapshot_state(snap: Snapshot) -> Any:
+    """The guard state a snapshot recorded (None for snapshots from before 0.4)."""
+    meta = getattr(snap, "metadata", None)
+    return meta.get(_STATE_KEY) if isinstance(meta, dict) else None
+
+
+def _copy_or_share(value: Any) -> Any:
+    """A deep copy of ``value``, or ``value`` itself if it cannot be copied (as in 0.3)."""
+    try:
+        try:
+            return copy.deepcopy(value)
+        except RecursionError:
+            return _copy_nested(value)
+    except Exception:
+        return value
 
 
 def _detach(value: Any) -> Any:

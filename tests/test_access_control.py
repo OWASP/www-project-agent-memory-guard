@@ -29,6 +29,7 @@ from agent_memory_guard import (
     UnknownPrincipal,
 )
 from agent_memory_guard.detectors.base import DetectionResult
+from agent_memory_guard.exceptions import IntegrityError
 from agent_memory_guard.integrations.autogen import GuardedGroupChatManager
 from agent_memory_guard.integrations.crewai import GuardedMemory
 from agent_memory_guard.storage import InMemoryStore
@@ -778,3 +779,53 @@ def test_snapshots_and_blocked_writes_survive_concurrent_writes():
         t.join()
         sys.setswitchinterval(interval)
     assert errors == []
+
+
+# ---- explain(snapshot_id=), allows(), and errors that cross processes ---------
+
+
+def test_explain_rollback_checks_the_snapshot_it_is_given():
+    g, ops, secops = secops_guard()
+    secops.write("cfg.limit", "100", cls=MemoryClass.POLICY)
+    old = ops.snapshot()
+    secops.write("cfg.limit", "999", cls=MemoryClass.POLICY)
+    ops.snapshot()  # the latest snapshot matches memory as it is now
+    assert ops.explain("rollback").allowed
+    decision = ops.explain("rollback", snapshot_id=old)
+    assert not decision.allowed and decision.stage == "class"
+    with pytest.raises(AccessDenied, match="class policy"):
+        ops.rollback(old)
+    assert secops.explain("rollback", snapshot_id=old).allowed
+    with pytest.raises(LookupError):
+        ops.explain("rollback", snapshot_id="no-such-snapshot")
+
+
+def test_allows_rejects_an_unknown_operation_as_decide_does():
+    access = team_policy().access
+    for check in (access.allows, access.decide):
+        with pytest.raises(ValueError, match="Unknown operation 'Write'"):
+            check("writer", "Write", "team.x")
+
+
+def test_access_denied_survives_pickling_and_copying():
+    g = MemoryGuard(policy=team_policy())
+    with pytest.raises(AccessDenied) as caught:
+        g.as_agent("writer").write("agents.researcher.notes", "x")
+    exc = caught.value
+    for clone in (pickle.loads(pickle.dumps(exc)), copy.copy(exc), copy.deepcopy(exc)):
+        assert type(clone) is AccessDenied
+        assert str(clone) == str(exc)
+        assert clone.decision == exc.decision
+        assert (clone.principal, clone.rule, clone.key) == (
+            "writer", "access_control", "agents.researcher.notes"
+        )
+
+
+def test_other_guard_errors_survive_pickling():
+    for exc in (
+        ClassificationError("moved", key="k", origin_task="t1", current_task="t2"),
+        IntegrityError("tampered", "k", "aaa", "bbb"),
+    ):
+        clone = pickle.loads(pickle.dumps(exc))
+        assert type(clone) is type(exc)
+        assert (clone.args, clone.__dict__) == (exc.args, exc.__dict__)

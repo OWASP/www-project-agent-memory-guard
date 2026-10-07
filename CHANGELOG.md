@@ -27,9 +27,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   also take `principal=`. Inside `with guard.as_agent("id"):` plain calls on that
   guard run as the agent; a generator paused inside the block does not pass the
   identity to its caller, and its own code keeps the identity wherever it is
-  resumed. Tasks and threads started while a generator holds a block open start
-  anonymous. A handle's `snapshot()` and `rollback()` return only the snapshot id.
-  Every `SecurityEvent` has a new `principal` field.
+  resumed. A `with` statement in an ordinary function belongs to that function, so
+  the tasks and threads it starts get its identity even when a generator further up
+  the stack called it. Tasks and threads started while a generator holds a block
+  open start anonymous. A handle's `snapshot()` and `rollback()` return only the
+  snapshot id. Every `SecurityEvent` has a new `principal` field.
 - **Private namespaces.** A key pattern such as `agents.{owner}.*` with
   `writers=["{owner}"]` gives every agent its own space.
 - **Class gate and admins.** With access rules, only `admins` may `snapshot()`,
@@ -42,11 +44,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Values are copied with access rules.** The guard stores a deep copy of each
   written value and returns a deep copy on read, so an agent cannot change memory it
   may only read by editing the object it got back.
-- **Looking inside a decision.** `guard.explain(...)` dry-runs an access decision.
-  `MemoryGuard(trace=True)` records each step of every operation (identity, access
-  rules, each detector, the deciding policy rule, snapshot, commit);
-  `guard.last_trace()` returns them, events carry them in `metadata["trace"]`, and
-  `format_trace()` prints them.
+- **Looking inside a decision.** `guard.explain(...)` dry-runs an access decision
+  (`snapshot_id=` picks the snapshot for `rollback`). `MemoryGuard(trace=True)`
+  records each step of every operation (identity, access rules, each detector, the
+  deciding policy rule, snapshot, commit); `guard.last_trace()` returns those of the
+  last operation in the current thread or asyncio task, events carry them in
+  `metadata["trace"]`, and `format_trace()` prints them. When one operation logs
+  several events (`retire_if()`), each carries the opening steps and the steps
+  since the previous event.
 - `Policy.evaluate()` returns the action and the name of the deciding rule.
 
 ### Changed
@@ -64,7 +69,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `last_trace()` of the original do not apply to it.
 - `Policy` has a new `access` field (None unless you call `with_access`), which
   shows in its `repr`.
+- `rollback()` on a store without `restore()` writes copies of the snapshot's
+  values (the value itself if it cannot be copied), so editing a restored value no
+  longer changes the snapshot.
+- `Policy.from_dict()` and `load_policy()` raise `ValueError` for a policy document
+  that is not a mapping, where 0.3 raised `AttributeError`.
+- Without access rules, each operation now checks for an agent identity. A write
+  plus a read costs about 3 to 5 microseconds more than in 0.3.3: about 10% on a
+  tiny value and 2 to 5% on a typical one (Python 3.12 and 3.13).
 - CI runs on Python 3.13 and 3.14.
+
+### Fixed
+
+- `AccessDenied`, `ClassificationError` and `IntegrityError` can be pickled and
+  copied, so they reach the caller from a process pool instead of breaking it.
+- The LlamaIndex adapter's `delete_message()` raises `AccessDenied` instead of
+  deleting the message from the backing store when the agent may not delete it.
 
 ## [0.3.3] - 2026-10-02
 

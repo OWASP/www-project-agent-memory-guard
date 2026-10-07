@@ -415,6 +415,8 @@ class AccessPolicy:
         target_class: MemoryClass | None = None,
     ) -> bool:
         """Fast path: the same answer as ``decide(...).allowed``, building nothing."""
+        if operation not in OPERATIONS:
+            raise ValueError(f"Unknown operation {operation!r}; expected one of {sorted(OPERATIONS)}")
         reg = self._registry
         if principal is not None and reg and principal not in reg:
             return False

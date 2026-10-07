@@ -247,6 +247,7 @@ def test_trace_of_a_content_block_shows_each_detector_and_the_snapshot():
         ("Card on file is 4111 1111 1111 1111", Action.REDACT, "commit", "stored redacted"),
         ("A" * 100_000, Action.QUARANTINE, "quarantine", "held for review, not stored"),
     ],
+    ids=["allow", "redact", "quarantine"],
 )
 def test_trace_of_allow_redact_and_quarantine(value, action, stage, outcome):
     g = MemoryGuard(policy=team_policy(), trace=True)
@@ -341,3 +342,18 @@ def test_snapshots_carry_state_only_for_the_keys_they_captured():
     store.delete("team.gone")  # e.g. a TTL expiry outside the guard
     state = g.snapshot(principal="supervisor").metadata["amg_state"]
     assert set(state["classes"]) == set(state["written_by"]) == {"team.a"}
+
+
+def test_each_event_of_a_retire_carries_the_opening_steps_and_its_own():
+    g = MemoryGuard(policy=team_policy(), trace=True)
+    for i in range(40):
+        g.write(f"team.k{i}", "old", principal="supervisor")
+    assert len(g.retire_if(lambda k, v: True, reason="cleanup", principal="supervisor")) == 40
+    traces = [e.metadata["trace"] for e in g.events if e.operation == "retire"]
+    assert len(traces) == 40
+    opening = traces[0][:2]
+    assert opening[0] == {"stage": "identity", "detail": "supervisor", "outcome": "via explicit"}
+    assert all(t[:2] == opening and t[-1]["stage"] == "event" for t in traces)
+    # Later events do not repeat the earlier ones, so traces do not grow with the count.
+    assert max(len(t) for t in traces[1:]) < len(traces[0]) + 2
+    assert len(g.last_trace()) > 40  # the operation's whole trace is still there

@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 from agent_memory_guard.events import Action
-from agent_memory_guard.exceptions import PolicyViolation
+from agent_memory_guard.exceptions import AccessDenied, PolicyViolation
 from agent_memory_guard.guard import MemoryGuard
 
 _HAS_LLAMAINDEX = False
@@ -112,6 +112,8 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
         msg_key = f"{self.store_key}.{key}"
         try:
             self.guard.delete(msg_key)
+        except AccessDenied:
+            raise  # the agent may not delete it, so leave the backing store alone
         except PolicyViolation:
             pass
         return cast("list[ChatMessage] | None", self._store.delete_messages(key))
@@ -120,6 +122,8 @@ class GuardedChatStore(BaseChatStore):  # type: ignore[misc, valid-type]
         msg_key = f"{self.store_key}.{key}.{idx}"
         try:
             self.guard.delete(msg_key)
+        except AccessDenied:
+            raise  # the agent may not delete it, so leave the backing store alone
         except PolicyViolation:
             pass
         return cast("ChatMessage | None", self._store.delete_message(key, idx))

@@ -1,5 +1,7 @@
 import textwrap
 
+import pytest
+
 from agent_memory_guard.events import Action, Severity
 from agent_memory_guard.policies.policy import Policy, load_policy
 
@@ -118,3 +120,14 @@ def test_policy_without_a_protected_key_rule_still_loads_with_no_keys():
     policy = Policy.from_dict(data)
     assert policy.protected_keys == ()
     assert [r.name for r in policy.rules] == ["block_injection"]
+
+
+@pytest.mark.parametrize("doc", ["- a: 1\n", "42\n", "just some text\n"])
+def test_a_policy_document_that_is_not_a_mapping_is_rejected(doc):
+    with pytest.raises(ValueError, match="must be a mapping"):
+        load_policy(doc)
+
+
+def test_from_dict_rejects_a_non_mapping():
+    with pytest.raises(ValueError, match="must be a mapping, not NoneType"):
+        Policy.from_dict(None)

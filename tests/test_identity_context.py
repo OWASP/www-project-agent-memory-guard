@@ -7,6 +7,10 @@ anonymous. Ambient identity never crosses from one guard to another.
 import asyncio
 import contextlib
 import contextvars
+import gc
+import subprocess
+import sys
+import textwrap
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -18,6 +22,7 @@ from agent_memory_guard import (
     MemoryGuard,
     Policy,
     PolicyViolation,
+    identity,
 )
 from agent_memory_guard.identity import check_id
 
@@ -157,6 +162,10 @@ def test_one_handle_entered_by_tasks_that_exit_out_of_order():
         g.write("plan.step4", "no handle entered here")
 
 
+@pytest.mark.skipif(
+    bool(getattr(sys.flags, "thread_inherit_context", 0)),
+    reason="new threads inherit the starter's context here (free-threaded builds)",
+)
 def test_a_thread_without_the_context_runs_anonymous():
     g = plan_guard()
     with g.as_agent("supervisor"), ThreadPoolExecutor(1) as pool:
@@ -461,12 +470,16 @@ def test_a_block_exited_from_another_task_is_ended_everywhere():
 def test_a_block_exited_from_another_thread_is_ended_in_the_entering_thread():
     g = plan_guard()
     supervisor = g.as_agent("supervisor")
-    supervisor.__enter__()
-    with ThreadPoolExecutor(1) as pool:
-        failed = pool.submit(supervisor.__exit__, None, None, None)
-        with pytest.raises(RuntimeError, match="did not enter"):
-            failed.result()
-    assert acting_as(g) is None
+
+    def body():  # in a throwaway context, so the test leaves nothing behind
+        supervisor.__enter__()
+        with ThreadPoolExecutor(1) as pool:
+            failed = pool.submit(supervisor.__exit__, None, None, None)
+            with pytest.raises(RuntimeError, match="did not enter"):
+                failed.result()
+        assert acting_as(g) is None
+
+    contextvars.copy_context().run(body)
 
 
 def test_async_class_wrappers_apply_the_block_to_their_body():
@@ -507,3 +520,270 @@ def test_leaving_a_plain_block_never_ends_a_paused_generators_block():
     next(it)
     it.close()
     assert seen == ["worker"]
+
+
+# ---- with statements in plain functions under generators ---------------------
+
+
+def test_a_plain_functions_block_reaches_its_threads_and_tasks_under_a_generator():
+    g = plan_guard()
+
+    async def in_a_task():
+        return acting_as(g, "notes.task")
+
+    def supervisor_step():
+        with g.as_agent("supervisor"):
+            with ThreadPoolExecutor(1) as pool:
+                thread = pool.submit(contextvars.copy_context().run, acting_as, g, "notes.thread")
+                in_thread = thread.result()
+            return acting_as(g, "notes.here"), in_thread, asyncio.run(in_a_task())
+
+    def streaming_view():  # a generator further up the stack, with no block of its own
+        yield supervisor_step()
+
+    expected = ("supervisor",) * 3
+    assert supervisor_step() == expected
+    assert next(streaming_view()) == expected
+    assert list(supervisor_step() for _ in range(1)) == [expected]
+    assert acting_as(g) is None
+
+
+def test_a_contextmanager_used_by_a_plain_function_under_a_generator_reaches_threads():
+    g = plan_guard()
+
+    @contextlib.contextmanager
+    def as_supervisor():
+        with g.as_agent("supervisor"):
+            yield
+
+    def step():
+        with as_supervisor():
+            with ThreadPoolExecutor(1) as pool:
+                return pool.submit(contextvars.copy_context().run, acting_as, g, "notes.t").result()
+
+    def view():
+        yield step()
+
+    assert next(view()) == "supervisor"
+    assert acting_as(g) is None
+
+
+def test_a_plain_block_inside_a_generators_block_wins_and_exits_cleanly():
+    g = plan_guard()
+    worker = g.as_agent("worker")
+    seen = []
+
+    def supervisor_step():
+        with worker:  # the same handle the generator holds: only this block ends
+            pass
+        with g.as_agent("supervisor"):
+            seen.append(acting_as(g, "notes.inner"))
+        seen.append(acting_as(g, "notes.after_inner"))
+
+    def stream():
+        with worker:
+            supervisor_step()
+            yield
+            seen.append(acting_as(g, "notes.resumed"))
+
+    it = stream()
+    next(it)
+    assert acting_as(g, "notes.caller") is None
+    next(it, None)
+    assert seen == ["supervisor", "worker", "worker"]
+    assert acting_as(g) is None
+
+
+def test_a_block_a_helper_enters_for_a_generator_stays_the_generators():
+    g = plan_guard()
+
+    def enter_as(stack, name):  # plain helpers that enter a block for their caller
+        stack.enter_context(g.as_agent(name))
+
+    def start(name):
+        handle = g.as_agent(name)
+        handle.__enter__()
+        return handle
+
+    def stream_with_exit_stack():
+        with contextlib.ExitStack() as stack:
+            enter_as(stack, "worker")
+            yield acting_as(g, "notes.a")
+            yield acting_as(g, "notes.b")
+
+    def stream_with_helper():
+        handle = start("worker")
+        try:
+            yield acting_as(g, "notes.c")
+        finally:
+            handle.__exit__(None, None, None)
+
+    for stream in (stream_with_exit_stack(), stream_with_helper()):
+        assert next(stream) == "worker"
+        # Between yields the caller keeps its own identity, not the worker's.
+        assert acting_as(g, "notes.caller") is None
+        stream.close()
+    assert acting_as(g) is None
+
+
+# ---- blocks the garbage collector ends -----------------------------------------
+
+GC_STREAMS = textwrap.dedent('''
+    import gc
+    import sys
+
+    from agent_memory_guard import MemoryGuard
+
+    handle = MemoryGuard().as_agent("worker")
+    closed = [0]
+
+    class Agent:
+        def __init__(self):
+            self.stream = self.run()  # a reference cycle through the paused stream
+            next(self.stream)
+
+        def run(self):
+            try:
+                with handle:
+                    while True:
+                        yield
+            finally:
+                closed[0] += 1
+
+    gc.set_threshold(int(sys.argv[1]))
+    for _ in range(2000):
+        Agent()
+    gc.collect()
+    print("done", closed[0])
+''')
+
+
+@pytest.mark.parametrize("threshold", [1, 10])
+def test_streams_the_garbage_collector_closes_neither_hang_nor_crash(threshold):
+    # Collecting at almost every allocation runs the streams' block exits inside
+    # the guard's own bookkeeping, which used to deadlock (3.12+) or crash (3.11).
+    done = subprocess.run(
+        [sys.executable, "-c", GC_STREAMS, str(threshold)],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    if sys.version_info >= (3, 11):
+        assert done.stdout.split() == ["done", "2000"]
+    else:  # 3.9 and 3.10 never free a paused stream in a cycle (documented)
+        assert done.stdout.split()[0] == "done"
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="3.9 and 3.10 never free a paused stream in a cycle"
+)
+def test_a_block_the_garbage_collector_ends_stops_applying():
+    g = plan_guard()
+    closed = []
+
+    def stream(box):
+        try:
+            with g.as_agent("supervisor"):
+                yield
+        finally:
+            closed.append(True)
+
+    box = []
+    it = stream(box)
+    box.append(it)  # only the collector can free it
+    next(it)
+    del it, box
+    gc.collect()
+    assert closed == [True]
+    with pytest.raises(AccessDenied, match="<anonymous>"):
+        g.write("plan.step1", "the stream's block has ended")
+    with g.as_agent("worker"):  # the next block tidies the registry
+        pass
+    assert g._guard_id not in identity._ANCHORED
+
+
+def test_cleanup_the_garbage_collector_runs_cannot_open_a_block(monkeypatch):
+    g = plan_guard()
+    worker = g.as_agent("worker")
+    unraisable = []
+    monkeypatch.setattr(sys, "unraisablehook", lambda u: unraisable.append(u.exc_value))
+
+    def stream(box):
+        try:
+            yield
+        finally:
+            with worker:
+                g.write("notes.cleanup", "done")
+
+    box = []
+    it = stream(box)
+    box.append(it)
+    next(it)
+    del it, box
+    gc.collect()
+    assert [type(e) for e in unraisable] == [RuntimeError]
+    assert "garbage collection" in str(unraisable[0])
+    assert g.read("notes.cleanup") is None
+    assert acting_as(g) is None
+
+
+def test_blocks_ended_elsewhere_do_not_pile_up_in_the_context_that_entered_them():
+    g = plan_guard()
+
+    async def stream():
+        with g.as_agent("worker"):
+            for i in range(3):
+                yield i
+
+    async def consumer():
+        for _ in range(50):
+            async for _ in stream():
+                break  # the loop closes the stream later, in another task
+            await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        acting_as(g)
+        return identity._AMBIENT.get().get(g._guard_id, ())
+
+    left = asyncio.run(consumer())
+    assert len(left) <= 2 and not any(e.closed for e in left)
+
+    def sync_stream():
+        with g.as_agent("worker"):
+            yield 1
+            yield 2
+
+    def finished_on_threads():
+        for _ in range(50):
+            it = sync_stream()
+            next(it)
+            with ThreadPoolExecutor(1) as pool:
+                pool.submit(list, it).result()
+        acting_as(g)
+        return identity._AMBIENT.get().get(g._guard_id, ())
+
+    assert contextvars.copy_context().run(finished_on_threads) == ()
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="on 3.9 and 3.10 a paused coroutine's frame keeps it alive"
+)
+def test_an_open_block_does_not_keep_an_abandoned_task_alive():
+    g = plan_guard()
+    cleaned = []
+
+    async def waiter():
+        try:
+            with g.as_agent("worker"):
+                await asyncio.Event().wait()
+        finally:
+            cleaned.append(True)
+
+    async def main():
+        for _ in range(5):
+            asyncio.ensure_future(waiter())
+        await asyncio.sleep(0)
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(main())
+    loop.close()  # the tasks are still pending, and nothing refers to them
+    gc.collect()
+    assert cleaned == [True] * 5

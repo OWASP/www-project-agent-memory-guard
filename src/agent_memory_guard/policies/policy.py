@@ -154,6 +154,8 @@ class Policy:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Policy:
+        if not isinstance(data, Mapping):
+            raise ValueError(f"A policy must be a mapping, not {type(data).__name__}")
         _check_fields(data)
         rules = [_parse_rule(r) for r in data.get("rules", [])]
         protected_keys = tuple(data.get("protected_keys", ()) or ())
