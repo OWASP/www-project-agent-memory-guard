@@ -14,6 +14,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-07
+
 ### Added
 
 - **Per-agent access control.** `Policy.with_access(AccessRule(...))` says which
@@ -345,6 +347,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [#87]: https://github.com/OWASP/www-project-agent-memory-guard/issues/87
 [#93]: https://github.com/OWASP/www-project-agent-memory-guard/pull/93
 [#94]: https://github.com/OWASP/www-project-agent-memory-guard/pull/94
+[0.4.0]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/OWASP/www-project-agent-memory-guard/compare/v0.3.0...v0.3.1

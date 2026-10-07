@@ -8,6 +8,7 @@ disclose them plainly.
 
 | Version | Supported |
 |---------|-----------|
+| 0.4.x   | ✅ Security fixes |
 | 0.3.x   | ✅ Security fixes |
 | 0.2.x   | ⚠️ Critical fixes only, until 2026-12-31 |
 | < 0.2   | ❌ Unsupported |
