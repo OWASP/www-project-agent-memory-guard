@@ -93,6 +93,10 @@ class Policy:
     version: int = 1
     access: AccessPolicy | None = None
 
+    def __post_init__(self) -> None:
+        self.protected_keys = _key_patterns("protected_keys", self.protected_keys)
+        self.immutable_keys = _key_patterns("immutable_keys", self.immutable_keys)
+
     def is_immutable(self, key: str) -> bool:
         """True if `key` matches any ``immutable_keys`` glob.
 
@@ -158,8 +162,8 @@ class Policy:
             raise ValueError(f"A policy must be a mapping, not {type(data).__name__}")
         _check_fields(data)
         rules = [_parse_rule(r) for r in data.get("rules", [])]
-        protected_keys = tuple(data.get("protected_keys", ()) or ())
-        immutable_keys = tuple(data.get("immutable_keys", ()) or ())
+        protected_keys = _key_patterns("protected_keys", data.get("protected_keys"))
+        immutable_keys = _key_patterns("immutable_keys", data.get("immutable_keys"))
         _check_key_rules_have_keys(rules, protected_keys, immutable_keys)
         return cls(
             version=int(data.get("version", 1)),
@@ -389,6 +393,34 @@ def load_policy(source: str | Path | dict[str, Any]) -> Policy:
         data = yaml.safe_load(text)
     return Policy.from_dict({} if data is None else data)
 
+
+
+def _key_patterns(field_name: str, value: Any) -> tuple[str, ...]:
+    """Normalise ``protected_keys``/``immutable_keys``: one glob, or a list of globs.
+
+    A bare string must not be iterated. ``tuple("agent.goal")`` is ten
+    one-character globs, which leaves ``agent.goal`` itself writable and
+    unbaselined while the policy still loads cleanly. A non-string entry would
+    make ``fnmatch`` raise inside the detector on every write, and the guard
+    fails open on detector errors, so both are settled here instead.
+    """
+    if value is None or value == "":
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, Mapping) or not isinstance(value, Iterable):
+        raise ValueError(
+            f"Policy field {field_name!r} must be a glob string or a list of them, "
+            f"not {type(value).__name__}"
+        )
+    patterns = tuple(value)
+    bad = [p for p in patterns if not isinstance(p, str)]
+    if bad:
+        raise ValueError(
+            f"Policy field {field_name!r} must contain only glob strings; got {bad!r}. "
+            "Quote entries that YAML reads as numbers or booleans."
+        )
+    return patterns
 
 
 def _check_key_rules_have_keys(
