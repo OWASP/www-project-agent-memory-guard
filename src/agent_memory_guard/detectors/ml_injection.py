@@ -1,6 +1,6 @@
 """ML-based prompt injection detector using transformer models.
 
-This detector uses a fine-tuned DistilBERT model to classify text as
+This detector uses a fine-tuned DeBERTa-v3 model to classify text as
 potentially containing prompt injection attacks. It provides higher
 accuracy than regex-based detection, especially for obfuscated attacks.
 
@@ -43,7 +43,8 @@ class MLInjectionDetector:
     threshold : float
         Classification threshold (0.0-1.0). Higher = fewer false positives.
     device : str
-        Device for inference: "cpu", "cuda", or "auto".
+        Device for inference, e.g. "cpu", "cuda" or "mps". "auto" is
+        treated as "cpu".
     max_length : int
         Maximum token length for input text.
     severity : Severity
