@@ -45,6 +45,12 @@ jobs:
           coverage report
           coverage xml
 
+      - name: Run tests through the access gate and with tracing on
+        if: matrix.python-version == '3.12'
+        run: |
+          AMG_TEST_MODE=allow-all python -m pytest tests/ -q
+          AMG_TEST_MODE=trace python -m pytest tests/ -q
+
       - name: Install the OpenClaw and Hermes adapter
         run: |
           pip install -e integrations/openclaw-agent-memory-guard
@@ -53,12 +59,6 @@ jobs:
         run: |
           ruff check integrations/openclaw-agent-memory-guard
           python -m pytest integrations/openclaw-agent-memory-guard/tests -v
-
-      - name: Run tests through the access gate and with tracing on
-        if: matrix.python-version == '3.12'
-        run: |
-          AMG_TEST_MODE=allow-all python -m pytest tests/ -q
-          AMG_TEST_MODE=trace python -m pytest tests/ -q
 
       - name: Upload coverage report
         if: matrix.python-version == '3.11'
