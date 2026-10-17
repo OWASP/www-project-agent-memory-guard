@@ -13,21 +13,25 @@ Agent Memory Guard uses a modular detector architecture. Each detector specializ
 | [Excessive Autonomy](excessive-autonomy.md) | Agent overreach | MEDIUM–HIGH | ASI-09 |
 | [Cross-Task Contamination](cross-task.md) | Task boundary violation | MEDIUM–HIGH | ASI-06 |
 | [Self-Reinforcement](self-reinforcement.md) | Feedback loop manipulation | MEDIUM–HIGH | ASI-06 |
-| [ML-Based Detection](ml-detection.md) | Advanced injection (DistilBERT) | HIGH–CRITICAL | ASI-03 |
+| [ML-Based Detection](ml-detection.md) | Advanced injection (DeBERTa-v3) | HIGH–CRITICAL | ASI-03 |
 | Size Anomaly | Unusually large values | LOW–MEDIUM | ASI-06 |
 | Rapid Change | Suspicious write frequency | LOW–MEDIUM | ASI-06 |
 
 ## How Detectors Work
 
-Each detector implements the `Detector` interface:
+Each detector implements the `Detector` protocol: a `name` and an `inspect()` method that is called for every memory operation:
 
 ```python
-from agent_memory_guard.detectors.base import Detector, DetectionResult
+from typing import Any
+
+from agent_memory_guard.detectors.base import DetectionResult, Detector
 
 class MyDetector(Detector):
-    def detect(self, key: str, value: any, **context) -> DetectionResult:
-        # Analyze the key-value pair
-        # Return DetectionResult with is_threat, severity, message
+    name = "my_detector"
+
+    def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
+        # Analyze the key-value pair for a "read" or "write" operation
+        # Return DetectionResult with matched, severity, message, metadata
         ...
 ```
 
@@ -59,32 +63,53 @@ guard = MemoryGuard(detectors=[
 
 ## Custom Detectors
 
-You can create custom detectors by implementing the `Detector` base class:
+You can create custom detectors by implementing the `Detector` protocol:
 
 ```python
-from agent_memory_guard.detectors.base import Detector, DetectionResult
+from typing import Any
+
+from agent_memory_guard import Severity
+from agent_memory_guard.detectors.base import DetectionResult, Detector
 
 class CompanyPolicyDetector(Detector):
     """Detect violations of company-specific memory policies."""
 
-    name = "CompanyPolicyDetector"
+    name = "company_policy"
 
-    def detect(self, key: str, value: any, **context) -> DetectionResult:
+    def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
         if "CONFIDENTIAL" in str(value).upper():
             return DetectionResult(
-                is_threat=True,
                 detector=self.name,
-                severity="high",
+                matched=True,
+                severity=Severity.HIGH,
                 message="Confidential data should not be stored in agent memory",
             )
-        return DetectionResult(is_threat=False, detector=self.name)
+        return DetectionResult(detector=self.name, matched=False)
 ```
 
-Register it with the guard:
+Register it with the guard. Passing `detectors=` replaces the default rule-based detectors, so list the ones you want to keep, and add a policy rule for the detector's `name` so its matches are acted on:
 
 ```python
-guard = MemoryGuard(detectors=[
-    *MemoryGuard.default_detectors(),
-    CompanyPolicyDetector(),
-])
+from agent_memory_guard import Action, MemoryGuard, Policy
+from agent_memory_guard.detectors import (
+    PromptInjectionDetector,
+    RapidChangeDetector,
+    SensitiveDataDetector,
+    SizeAnomalyDetector,
+)
+from agent_memory_guard.policies import PolicyRule
+
+policy = Policy.strict()
+policy.rules.append(PolicyRule("block_company_policy", "company_policy", Action.BLOCK))
+
+guard = MemoryGuard(
+    policy=policy,
+    detectors=[
+        PromptInjectionDetector(),
+        SensitiveDataDetector(),
+        SizeAnomalyDetector(),
+        RapidChangeDetector(),
+        CompanyPolicyDetector(),
+    ],
+)
 ```
