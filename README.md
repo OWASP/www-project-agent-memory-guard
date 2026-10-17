@@ -159,6 +159,15 @@ amg-bench --out benchmarks/memory-systems   # reproduce; grade mem0/Letta/Zep wi
 
 Jump to: [LangChain](#langchain-integration) · [LangChain middleware](#langchain-middleware) · [OpenAI Agents](#openai-agents-sdk) · [AutoGen](#autogen) · [mem0](#mem0) · [CrewAI](#crewai)
 
+**New to framework integrations?** Start here:
+
+1. [5-minute how-to Discussion #116](https://github.com/OWASP/www-project-agent-memory-guard/discussions/116) — walks through wiring up `MemoryGuardMiddleware` for LangChain.
+2. The [LangChain middleware snippet](#langchain-middleware) below — copy-pasteable `pip install` + agent setup.
+3. The [public clinic Gist](https://gist.github.com/vgudur-dev/ead8817d2f4df08c04b808cc5b53eb06) — a runnable `Policy.strict()` repro (~15 min) to see it block a real violation.
+4. After trying the clinic, open an [`Adopter: <name> — <framework>` issue](https://github.com/OWASP/www-project-agent-memory-guard/issues/new?title=Adopter%3A+%3Cname%3E+%E2%80%94+%3Cframework%3E&labels=adopter) with your stack versions — it's optional, but it helps us prioritize which integrations to harden next.
+
+This is a community how-to, not a product endorsement: the project is not OWASP-certified, is not MITRE-approved, and the ATLAS AML.M0031 reference is a YAML listing only (see [Recognition](#recognition)).
+
 ### LangChain integration
 
 ```python
