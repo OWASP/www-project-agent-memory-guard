@@ -79,3 +79,14 @@ Access security events through the guard:
 for event in guard.events:
     print(f"[{event.severity.value}] {event.detector}: {event.message}")
 ```
+
+## Middleware for `create_agent`
+
+Building with `langchain.agents.create_agent` instead of `BaseChatMessageHistory`? Use `MemoryGuardMiddleware` from the separate `langchain-agent-memory-guard` package:
+
+- [5-minute how-to (Discussion #116)](https://github.com/OWASP/www-project-agent-memory-guard/discussions/116)
+- [README middleware example](https://github.com/OWASP/www-project-agent-memory-guard#langchain-middleware)
+- [Public clinic Gist](https://gist.github.com/vgudur-dev/ead8817d2f4df08c04b808cc5b53eb06) — `Policy.strict()` repro, ~15 minutes
+- Tried it in production? Open an issue titled `Adopter: <name> — LangChain` to be added to [ADOPTERS.md](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/ADOPTERS.md)
+
+This project is not OWASP-certified, not MITRE-approved, and the ATLAS AML.M0031 reference elsewhere in this repo is a YAML listing only, not an endorsement.
