@@ -102,4 +102,5 @@ else:
 print()
 print("📖 Learn more: https://github.com/OWASP/www-project-agent-memory-guard")
 print("📦 Install: pip install agent-memory-guard")
+print("⭐ Useful? Star it so other teams can find it: https://github.com/OWASP/www-project-agent-memory-guard")
 print("=" * 60)
