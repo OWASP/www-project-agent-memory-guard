@@ -24,8 +24,9 @@ python demo.py
 ## Try It
 
 1. **Run the attack-then-block demo:** `python demo.py`
-2. **Open the notebook:** `jupyter notebook examples/poison_and_protect.ipynb`
-3. **Build your own agent:** Start from `templates/secure_agent.py`
+2. **Open the notebook:** `jupyter notebook examples/notebooks/poison_and_protect.ipynb`
+3. **Build your own agent:** Start from `templates/secure-agent-starter/agent.py`
+4. **Like it?** [Star the repo](https://github.com/OWASP/www-project-agent-memory-guard) so other teams can find it.
 
 ## Learn More
 
