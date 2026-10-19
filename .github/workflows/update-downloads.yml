@@ -75,16 +75,20 @@ jobs:
           CLONES=${{ steps.downloads.outputs.clones }}
           PYPI=$((AMG + LANGCHAIN))
 
-          # The README heading reports installs and clones as two separate figures:
-          #   ### 📦 7,699 PyPI downloads · 9,465 repository clones
+          # The README heading reports installs and clones as two separate figures,
+          # followed by their sum:
+          #   ### 📦 7,699 PyPI downloads · 9,465 repository clones · 17,164 total
+          # The total is recomputed on every run. The pattern below also accepts the
+          # older heading without a total, so either form updates instead of failing.
           # An earlier version of this step looked for "N+ total downloads", which has
           # not existed in the README since the figures were split. The pattern simply
           # stopped matching, sed silently changed nothing, and the step reported
           # "No changes to commit" on every run - so the published numbers froze while
           # the workflow went on looking healthy. The guard below exists so that a
           # non-matching pattern fails loudly instead of quietly freezing the figures.
-          if ! grep -qE '^### 📦 [0-9,]+ PyPI downloads · [0-9,]+ repository clones' README.md; then
-            echo "::error::The README adoption heading does not match the expected format. Expected a line like '### 📦 7,699 PyPI downloads · 9,465 repository clones'. Refusing to guess - fix the heading or this step."
+          HEADING='^### 📦 [0-9,]+ PyPI downloads · [0-9,]+ repository clones( · [0-9,]+ total)?$'
+          if ! grep -qE "$HEADING" README.md; then
+            echo "::error::The README adoption heading does not match the expected format. Expected a line like '### 📦 7,699 PyPI downloads · 9,465 repository clones · 17,164 total'. Refusing to guess - fix the heading or this step."
             exit 1
           fi
 
@@ -97,9 +101,11 @@ jobs:
             exit 1
           fi
 
+          TOTAL=$((PYPI + CLONES))
           PYPI_D=$(python3 -c "print(f'{$PYPI:,}')")
           CLONES_D=$(python3 -c "print(f'{$CLONES:,}')")
-          sed -i -E "s/^### 📦 [0-9,]+ PyPI downloads · [0-9,]+ repository clones/### 📦 $PYPI_D PyPI downloads · $CLONES_D repository clones/" README.md
+          TOTAL_D=$(python3 -c "print(f'{$TOTAL:,}')")
+          sed -i -E "s/$HEADING/### 📦 $PYPI_D PyPI downloads · $CLONES_D repository clones · $TOTAL_D total/" README.md
 
       - name: Commit and push if changed
         run: |
