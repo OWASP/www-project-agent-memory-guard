@@ -43,3 +43,7 @@ guarded_memory = FrameworkIntegration(original_memory, guard=guard)
 # Step 3: Use as normal — AMG screens all operations transparently
 agent = Agent(memory=guarded_memory)
 ```
+
+## FAQ
+
+**Using `langchain.agents.create_agent`?** See the [LangChain integration page](langchain.md#middleware-for-create_agent) for the middleware how-to, a public clinic, and how to add your team to adopters.
