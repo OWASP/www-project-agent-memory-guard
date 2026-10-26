@@ -111,22 +111,71 @@ Agent Memory Guard sits between the agent and its memory store, screening every 
 
 ## Benchmark results
 
-Measured on the project's 55-case benchmark: 40 representative attack payloads across 4 threat categories plus 15 benign controls (AMG 0.2.2, run of 2 May 2026; [full report](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/benchmarks/results/benchmark_report.md)):
+Measured on the project's labeled security benchmark: 54 representative attack payloads across 4 threat categories (injection, leakage, tampering, churn) plus 18 benign controls ([full report](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/benchmarks/results/benchmark_report.md)):
 
 | Metric | Value |
 |--------|-------|
-| **Detection rate (recall)** | 92.5% |
+| **Detection rate (recall)** | 94.4% |
 | **Precision** | 100% |
 | **False positive rate** | 0% |
-| **Median latency** | 62 µs |
-| **F1 score** | 0.961 |
+| **False negative rate** | 5.6% |
+| **Median latency** | 37 µs |
+| **F1 score** | 0.971 |
+
+### Confusion Matrix
+
+| Actual \ Predicted | Detected (Positive) | Allowed (Negative) |
+|-------------------|---------------------|--------------------|
+| **Attack (Positive)** | 51 (TP) | 3 (FN) |
+| **Benign (Negative)** | 0 (FP) | 18 (TN) |
+
+### Detection by Category
 
 | Attack category | Detection rate |
 |-----------------|----------------|
-| Prompt injection | 100% (15/15) |
-| Protected key tampering | 100% (8/8) |
-| Sensitive data leakage | 83% (10/12) |
-| Size anomaly | 80% (4/5) |
+| Injection | 100% (20/20) |
+| Tampering | 100% (12/12) |
+| Churn | 100% (8/8) |
+| Leakage | 79% (11/14) |
+
+### Performance Overhead
+
+Median latencies across operations, policies, and payload sizes comparing `InMemoryStore` and `RedisMemoryStore` (fakeredis backend):
+
+| Policy | Size | Operation | InMemoryStore (µs) | RedisMemoryStore (µs) | Overhead |
+|--------|------|-----------|--------------------|-----------------------|----------|
+| 1-rule | 100b | read | 18.8 | 96.3 | 5.1x |
+| 1-rule | 100b | write | 19.0 | 48.7 | 2.6x |
+| 1-rule | 100b | snapshot | 9.8 | 97.0 | 9.8x |
+| 1-rule | 100b | rollback | 6.2 | 111.1 | 17.9x |
+| 1-rule | 1kb | read | 150.2 | 220.2 | 1.5x |
+| 1-rule | 1kb | write | 150.7 | 175.4 | 1.2x |
+| 1-rule | 1kb | snapshot | 12.3 | 96.8 | 7.8x |
+| 1-rule | 1kb | rollback | 6.1 | 114.6 | 18.8x |
+| 1-rule | 10kb | read | 1537.5 | 1488.3 | 1.0x |
+| 1-rule | 10kb | write | 1419.8 | 1506.1 | 1.1x |
+| 1-rule | 10kb | snapshot | 36.6 | 139.2 | 3.8x |
+| 1-rule | 10kb | rollback | 6.2 | 144.6 | 23.4x |
+| 1-rule | 100kb | read | 13998.6 | 14110.2 | 1.0x |
+| 1-rule | 100kb | write | 13811.7 | 14016.1 | 1.0x |
+| 1-rule | 100kb | snapshot | 275.4 | 570.5 | 2.1x |
+| 1-rule | 100kb | rollback | 5.8 | 395.7 | 68.8x |
+| 10-rule | 100b | read | 17.2 | 104.4 | 6.1x |
+| 10-rule | 100b | write | 18.1 | 68.6 | 3.8x |
+| 10-rule | 100b | snapshot | 9.2 | 98.8 | 10.7x |
+| 10-rule | 100b | rollback | 5.9 | 132.7 | 22.5x |
+| 10-rule | 1kb | read | 139.9 | 237.5 | 1.7x |
+| 10-rule | 1kb | write | 141.3 | 182.3 | 1.3x |
+| 10-rule | 1kb | snapshot | 11.8 | 97.3 | 8.3x |
+| 10-rule | 1kb | rollback | 5.8 | 115.6 | 19.9x |
+| 10-rule | 10kb | read | 1367.8 | 1468.0 | 1.1x |
+| 10-rule | 10kb | write | 1383.8 | 1450.0 | 1.0x |
+| 10-rule | 10kb | snapshot | 36.6 | 130.6 | 3.6x |
+| 10-rule | 10kb | rollback | 5.9 | 134.4 | 22.9x |
+| 10-rule | 100kb | read | 13808.8 | 14068.8 | 1.0x |
+| 10-rule | 100kb | write | 13939.5 | 14109.9 | 1.0x |
+| 10-rule | 100kb | snapshot | 277.7 | 506.2 | 1.8x |
+| 10-rule | 100kb | rollback | 5.9 | 373.0 | 63.4x |
 
 ```bash
 python benchmarks/security_benchmark.py   # reproduce locally
