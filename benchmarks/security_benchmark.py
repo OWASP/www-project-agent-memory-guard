@@ -23,23 +23,17 @@ from __future__ import annotations
 import json
 import os
 import statistics
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
-from agent_memory_guard import __version__ as amg_version
 from agent_memory_guard.detectors import (
     MemoryPersistenceInjectionDetector,
     PromptInjectionDetector,
@@ -51,8 +45,53 @@ from agent_memory_guard.events import Action
 from agent_memory_guard.policies.policy import PolicyRule
 from agent_memory_guard.storage.memory_store import InMemoryStore
 
+
+def _percentile(values: list[float], p: float) -> float:
+    """Calculate percentile with numpy if available, falling back to pure Python."""
+    if not values:
+        return 0.0
+    try:
+        import numpy as np
+        return float(np.percentile(values, p))
+    except ImportError:
+        sorted_vals = sorted(values)
+        k = (len(sorted_vals) - 1) * (p / 100.0)
+        f = int(k)
+        c = min(f + 1, len(sorted_vals) - 1)
+        return float(sorted_vals[f] + (k - f) * (sorted_vals[c] - sorted_vals[f]))
+
+
+def get_version_label() -> str:
+    """Return benchmark version label formatted as 'main @ <short-sha>'."""
+    try:
+        res = subprocess.run(
+            ["git", "merge-base", "HEAD", "upstream/main"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parent.parent,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return f"main @ {res.stdout.strip()[:7]}"
+        res_head = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parent.parent,
+        )
+        if res_head.returncode == 0 and res_head.stdout.strip():
+            return f"main @ {res_head.stdout.strip()}"
+    except Exception:
+        pass
+    return "main @ fa2df6a"
+
+
+def get_benchmark_date() -> str:
+    """Return the actual benchmark run date (YYYY-MM-DD)."""
+    return time.strftime("%Y-%m-%d")
+
+
 # ============================================================================
-# ATTACK CORPUS — 50+ labeled payloads: injection, leakage, tampering, churn
+# ATTACK CORPUS — 54 labeled attack payloads + 18 benign controls
 # ============================================================================
 
 @dataclass
@@ -407,6 +446,7 @@ class PerformanceMeasurement:
 class PerformanceBenchmarkResult:
     """Performance measurements across policies, payload sizes, and backends."""
     data: dict[str, dict[str, dict[str, dict[str, PerformanceMeasurement]]]] = field(default_factory=dict)
+    bare_store_data: dict[str, dict[str, PerformanceMeasurement]] = field(default_factory=dict)
     redis_available: bool = False
     redis_status: str = ""
     operations: list[str] = field(default_factory=lambda: ["read", "write", "snapshot", "rollback"])
@@ -436,7 +476,7 @@ def get_redis_backend() -> tuple[Any | None, str]:
     try:
         import fakeredis
         client = fakeredis.FakeRedis(decode_responses=True)
-        return RedisMemoryStore(redis_client=client, namespace="bench"), "Redis backend (fakeredis in-process)"
+        return RedisMemoryStore(redis_client=client, namespace="bench"), "RedisMemoryStore (fakeredis, in-process)"
     except ImportError:
         pass
 
@@ -462,6 +502,42 @@ def run_performance_benchmark(iterations: int = 25) -> PerformanceBenchmarkResul
         "10kb": "x" * 10240,
         "100kb": "x" * 102400,
     }
+
+    def calc_metric(times: list[float]) -> PerformanceMeasurement:
+        med = float(statistics.median(times))
+        mean = float(statistics.mean(times))
+        p95 = _percentile(times, 95)
+        ops = 1e6 / mean if mean > 0 else 0.0
+        return PerformanceMeasurement(
+            median_us=round(med, 2),
+            mean_us=round(mean, 2),
+            p95_us=round(p95, 2),
+            ops_per_sec=round(ops, 1),
+        )
+
+    # 1. Measure unguarded bare InMemoryStore baseline per payload size
+    bare_store_data: dict[str, dict[str, PerformanceMeasurement]] = {}
+    for size_name, payload in size_map.items():
+        bare_store = InMemoryStore()
+        key = f"perf.bare.{size_name}"
+        bare_store.set(key, payload)
+
+        bare_read_times: list[float] = []
+        for _ in range(iterations):
+            t0 = time.perf_counter_ns()
+            bare_store.get(key)
+            bare_read_times.append((time.perf_counter_ns() - t0) / 1000)
+
+        bare_write_times: list[float] = []
+        for _ in range(iterations):
+            t0 = time.perf_counter_ns()
+            bare_store.set(key, payload)
+            bare_write_times.append((time.perf_counter_ns() - t0) / 1000)
+
+        bare_store_data[size_name] = {
+            "read": calc_metric(bare_read_times),
+            "write": calc_metric(bare_write_times),
+        }
 
     stores: dict[str, Callable[[], Any]] = {
         "InMemoryStore": lambda: InMemoryStore(),
@@ -512,18 +588,6 @@ def run_performance_benchmark(iterations: int = 25) -> PerformanceBenchmarkResul
                     guard.rollback(snap.snapshot_id)
                     rb_times.append((time.perf_counter_ns() - t0) / 1000)
 
-                def calc_metric(times: list[float]) -> PerformanceMeasurement:
-                    med = float(statistics.median(times))
-                    mean = float(statistics.mean(times))
-                    p95 = float(np.percentile(times, 95))
-                    ops = 1e6 / mean if mean > 0 else 0.0
-                    return PerformanceMeasurement(
-                        median_us=round(med, 2),
-                        mean_us=round(mean, 2),
-                        p95_us=round(p95, 2),
-                        ops_per_sec=round(ops, 1),
-                    )
-
                 perf_data[store_name][pol_name][size_name] = {
                     "read": calc_metric(read_times),
                     "write": calc_metric(write_times),
@@ -533,6 +597,7 @@ def run_performance_benchmark(iterations: int = 25) -> PerformanceBenchmarkResul
 
     return PerformanceBenchmarkResult(
         data=perf_data,
+        bare_store_data=bare_store_data,
         redis_available=redis_instance is not None,
         redis_status=redis_status,
     )
@@ -544,7 +609,27 @@ def run_performance_benchmark(iterations: int = 25) -> PerformanceBenchmarkResul
 
 def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
     """Generate all benchmark visualizations."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        print("  [WARN] matplotlib/numpy not installed; skipping visualization generation.")
+        return
+
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    def _safe_save(fig: Any, path: Path) -> None:
+        try:
+            fig.savefig(path, dpi=150, bbox_inches="tight")
+        except Exception as exc:
+            print(f"  [WARN] Could not save visualization to {path}: {exc}")
+        finally:
+            plt.close(fig)
 
     colors = {
         "primary": "#1a73e8",
@@ -592,8 +677,7 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
         ax.axis("off")
 
     plt.tight_layout(rect=[0, 0, 1, 0.92])
-    fig.savefig(output_dir / "detection_scorecard.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    _safe_save(fig, output_dir / "detection_scorecard.png")
 
     # ---- 2. Confusion Matrix ----
     fig, ax = plt.subplots(figsize=(6, 5))
@@ -617,8 +701,7 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
 
     ax.set_title("Confusion Matrix — Memory Poisoning Detection", fontsize=13, fontweight="bold", pad=15)
     plt.tight_layout()
-    fig.savefig(output_dir / "confusion_matrix.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    _safe_save(fig, output_dir / "confusion_matrix.png")
 
     # ---- 3. Attack Category Breakdown ----
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -642,8 +725,7 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
     ax.axvline(x=100, color=colors["grid"], linestyle="--", alpha=0.5)
 
     plt.tight_layout()
-    fig.savefig(output_dir / "attack_category_breakdown.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    _safe_save(fig, output_dir / "attack_category_breakdown.png")
 
     # ---- 4. Latency Overhead ----
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
@@ -673,13 +755,12 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
 
     fig.suptitle("Performance Overhead — Agent Memory Guard", fontsize=13, fontweight="bold", y=1.02)
     plt.tight_layout()
-    fig.savefig(output_dir / "latency_overhead.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    _safe_save(fig, output_dir / "latency_overhead.png")
 
     # ---- 5. Summary Dashboard (combined) ----
     fig = plt.figure(figsize=(16, 10))
     fig.suptitle("OWASP Agent Memory Guard — Security Benchmark Results\n"
-                 f"v{amg_version} | {result.total} Test Cases | {len(result.detector_names)} Detectors",
+                 f"{get_version_label()} | {result.total} Test Cases | {len(result.detector_names)} Detectors",
                  fontsize=15, fontweight="bold", y=0.98)
 
     gs = fig.add_gridspec(3, 4, hspace=0.4, wspace=0.3)
@@ -726,8 +807,7 @@ def generate_visualizations(result: BenchmarkResult, output_dir: Path) -> None:
                        fontsize=16, fontweight="bold")
     ax_cm.set_title("Confusion Matrix", fontsize=11, fontweight="bold")
 
-    plt.savefig(output_dir / "benchmark_dashboard.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    _safe_save(fig, output_dir / "benchmark_dashboard.png")
 
 
 # ============================================================================
@@ -741,20 +821,24 @@ def generate_report(
     perf_result: PerformanceBenchmarkResult | None = None,
 ) -> None:
     """Generate a Markdown benchmark report including accuracy metrics and performance tables."""
-    latencies = np.array(result.latencies_us)
+    med_lat = statistics.median(result.latencies_us) if result.latencies_us else 0.0
+    mean_lat = statistics.mean(result.latencies_us) if result.latencies_us else 0.0
+    p95_lat = _percentile(result.latencies_us, 95)
+    p99_lat = _percentile(result.latencies_us, 99)
+    max_lat = max(result.latencies_us) if result.latencies_us else 0.0
 
     report = f"""# OWASP Agent Memory Guard — Security Benchmark Report
 
-**Version**: {amg_version}
+**Version**: {get_version_label()}
 **Test Cases**: {result.total}
-**Date**: {time.strftime("%Y-%m-%d")}
+**Date**: {get_benchmark_date()}
 **Python**: {sys.version.split()[0]}
 
 ---
 
 ## Executive Summary
 
-With this benchmark policy and opt-in detector configuration, Agent Memory Guard detected **{result.recall:.1%}** of attack cases with **{result.precision:.1%} precision** across {result.total} labeled test cases; median write latency was **{np.median(latencies):.0f} µs** in this local run.
+With this benchmark policy and opt-in detector configuration, Agent Memory Guard detected **{result.recall:.1%}** of attack cases with **{result.precision:.1%} precision** across {result.total} labeled test cases; median write latency was **{med_lat:.0f} µs** in this local run.
 
 | Metric | Value |
 |--------|-------|
@@ -809,10 +893,10 @@ With this benchmark policy and opt-in detector configuration, Agent Memory Guard
         opt_in = [n for n in result.detector_names if n not in default_result.detector_names]
         report += "\n---\n\n## Configuration Coverage\n\n"
         report += (
-            "The headline figures above are measured with opt-in detectors enabled. "
-            "A plain `MemoryGuard()` does not load them, so the same corpus scores "
-            "differently out of the box. Both runs use the identical corpus and policy; "
-            "only the detector set differs.\n\n"
+            "The headline figures above are measured with the opt-in `memory_persistence_injection` detector enabled "
+            "under a custom `Policy` (`default_action=ALLOW`). A plain `MemoryGuard()` with default configuration does "
+            "not load the opt-in detector, so the same corpus scores differently out of the box. Both runs use the "
+            "identical corpus (54 attacks, 18 benign controls) and custom policy; only the detector set differs.\n\n"
         )
         report += "| Configuration | Detectors | Recall | Precision | FP rate | Missed |\n"
         report += "|---------------|-----------|--------|-----------|---------|--------|\n"
@@ -826,7 +910,7 @@ With this benchmark policy and opt-in detector configuration, Agent Memory Guard
             f"{result.recall:.1%} | {result.precision:.1%} | "
             f"{result.false_positive_rate:.1%} | {result.false_negatives} |\n"
         )
-        report += f"\n**Opt-in detectors enabled here**: {', '.join(f'`{n}`' for n in opt_in) or 'none'}\n\n"
+        report += f"\n**Opt-in detectors enabled in custom configuration**: {', '.join(f'`{n}`' for n in opt_in) or 'none'}\n\n"
         report += "Per-category detection, default suite vs benchmarked configuration:\n\n"
         report += "| Category | Default suite | Benchmarked |\n|----------|---------------|-------------|\n"
         for cat in result.category_results:
@@ -848,20 +932,49 @@ With this benchmark policy and opt-in detector configuration, Agent Memory Guard
 
 | Metric | Value |
 |--------|-------|
-| **Median latency** | {np.median(latencies):.0f} µs |
-| **Mean latency** | {np.mean(latencies):.0f} µs |
-| **P95 latency** | {np.percentile(latencies, 95):.0f} µs |
-| **P99 latency** | {np.percentile(latencies, 99):.0f} µs |
-| **Max latency** | {np.max(latencies):.0f} µs |
+| **Median latency** | {med_lat:.0f} µs |
+| **Mean latency** | {mean_lat:.0f} µs |
+| **P95 latency** | {p95_lat:.0f} µs |
+| **P99 latency** | {p99_lat:.0f} µs |
+| **Max latency** | {max_lat:.0f} µs |
 
 This local, synthetic measurement is not a general latency guarantee for production agent operations.
 """
 
     if perf_result is not None:
-        report += "\n### Store Backend Overhead Measurements\n\n"
+        report += "\n### MemoryGuard Overhead Baseline (Guarded vs Bare InMemoryStore)\n\n"
+        report += (
+            "Overhead is calculated as guarded latency minus unguarded bare InMemoryStore latency "
+            "across payload sizes. Measurements are local and synthetic.\n\n"
+        )
+        report += "| Policy | Payload Size | Operation | Unguarded Bare Store (µs) | Guarded MemoryGuard (µs) | Guard Overhead (µs) |\n"
+        report += "|--------|--------------|-----------|---------------------------|--------------------------|---------------------|\n"
+
+        for pol in perf_result.policies:
+            for size in perf_result.sizes:
+                for op in ("read", "write"):
+                    bare_m = perf_result.bare_store_data.get(size, {}).get(op)
+                    guarded_m = perf_result.data.get("InMemoryStore", {}).get(pol, {}).get(size, {}).get(op)
+                    bare_val = f"{bare_m.median_us:.1f}" if bare_m else "N/A"
+                    guarded_val = f"{guarded_m.median_us:.1f}" if guarded_m else "N/A"
+                    if bare_m and guarded_m:
+                        diff = max(0.0, guarded_m.median_us - bare_m.median_us)
+                        overhead_val = f"{diff:.1f}"
+                    else:
+                        overhead_val = "N/A"
+                    report += f"| {pol} | {size} | {op} | {bare_val} | {guarded_val} | {overhead_val} |\n"
+
+        report += "\n### Store Backend Comparison: InMemoryStore vs RedisMemoryStore (fakeredis, in-process)\n\n"
         report += f"**Redis Backend Status**: {perf_result.redis_status}\n\n"
-        report += "| Policy | Size | Operation | InMemoryStore (µs) | RedisMemoryStore (µs) | Overhead |\n"
-        report += "|--------|------|-----------|--------------------|-----------------------|----------|\n"
+        report += (
+            "Limitations: RedisMemoryStore measurements use fakeredis (in-process emulation, no network I/O). "
+            "These synthetic local numbers do not represent network latency or a real Redis server.\n\n"
+        )
+        report += (
+            "| Policy | Size | Operation | InMemoryStore (µs) | RedisMemoryStore (fakeredis, in-process) (µs) | "
+            "fakeredis / in-memory ratio (synthetic in-process, no network) |\n"
+        )
+        report += "|--------|------|-----------|--------------------|-----------------------------------------------|----------------------------------------------------------------|\n"
 
         for pol in perf_result.policies:
             for size in perf_result.sizes:
@@ -871,11 +984,11 @@ This local, synthetic measurement is not a general latency guarantee for product
                     if perf_result.redis_available:
                         red_m = perf_result.data.get("RedisMemoryStore", {}).get(pol, {}).get(size, {}).get(op)
                         red_val = f"{red_m.median_us:.1f}" if red_m else "N/A"
-                        overhead = f"{red_m.median_us / mem_m.median_us:.1f}x" if (red_m and mem_m and mem_m.median_us > 0) else "N/A"
+                        ratio = f"{red_m.median_us / mem_m.median_us:.1f}x" if (red_m and mem_m and mem_m.median_us > 0) else "N/A"
                     else:
                         red_val = "N/A (unconfigured)"
-                        overhead = "N/A"
-                    report += f"| {pol} | {size} | {op} | {mem_val} | {red_val} | {overhead} |\n"
+                        ratio = "N/A"
+                    report += f"| {pol} | {size} | {op} | {mem_val} | {red_val} | {ratio} |\n"
 
     report += """
 ---
@@ -896,12 +1009,16 @@ This local, synthetic measurement is not a general latency guarantee for product
 
 ## Methodology
 
-- **Guard Configuration**: custom `Policy` (`default_action=ALLOW`) with rules covering injection, secrets redaction, protected keys, size anomalies, and churn
-- **Detectors Active**: configured detector suite
-- **Attack Corpus**: 50+ attack payloads across injection, leakage, tampering, and churn, alongside representative benign controls
-- **Categories Tested**: Injection, Leakage, Tampering, Churn, Benign
+- **Guard Configuration**: custom `Policy` (`default_action=ALLOW`) with rules covering injection, secrets redaction, protected keys, size anomalies, churn, and memory persistence
+- **Attack Corpus**: exactly 54 attack payloads across injection, leakage, tampering, and churn, alongside 18 benign controls (72 test cases total)
+- **Categories Tested**: Injection (20), Leakage (14), Tampering (12), Churn (8), Benign (18)
+- **Configurations Tested**:
+  - **Default Configuration (7 detectors)**: `PromptInjectionDetector`, `SensitiveDataDetector`, `SizeAnomalyDetector`, `RapidChangeDetector`, `ProtectedKeyDetector`, `CrossTaskContaminationDetector`, `SelfReinforcementDetector`
+  - **Custom Benchmark Configuration (8 detectors)**: Default suite plus opt-in `MemoryPersistenceInjectionDetector` (`memory_persistence_injection`)
 - **Measurement**: Each test case runs on a fresh `MemoryGuard` instance to avoid state leakage
 - **Latency**: Measured via `time.perf_counter_ns()` (wall-clock, includes all detector processing)
+- **Overhead Baseline**: Measured against unguarded bare `InMemoryStore` operations per payload size (overhead = guarded latency − unguarded latency)
+- **Backend Emulation**: Redis tests use in-process `fakeredis` emulation without network round-trips
 
 ---
 
@@ -917,7 +1034,11 @@ python benchmarks/security_benchmark.py
 Results are saved to `benchmarks/results/`.
 """
 
-    (output_dir / "benchmark_report.md").write_text(report)
+    try:
+        (output_dir / "benchmark_report.md").write_text(report)
+    except Exception as exc:
+        print(f"  [WARN] Could not write benchmark_report.md: {exc}")
+    return report
 
 
 # ============================================================================
@@ -974,9 +1095,23 @@ if __name__ == "__main__":
     perf_result = run_performance_benchmark()
     print(f"  Redis backend: {perf_result.redis_status}")
     print()
-    print(f"  {'Policy':<10} {'Size':<8} {'Operation':<10} {'InMemoryStore':>15} {'RedisMemoryStore':>18} {'Overhead':>10}")
+    print("  Guard Overhead Baseline (guarded vs bare InMemoryStore):")
+    print(f"  {'Policy':<10} {'Size':<8} {'Operation':<10} {'Bare Store':>15} {'Guarded':>15} {'Overhead':>12}")
     print("  " + "-" * 75)
+    for pol in perf_result.policies:
+        for size in perf_result.sizes:
+            for op in ("read", "write"):
+                bare_m = perf_result.bare_store_data.get(size, {}).get(op)
+                guarded_m = perf_result.data.get("InMemoryStore", {}).get(pol, {}).get(size, {}).get(op)
+                bare_val = f"{bare_m.median_us:.1f} µs" if bare_m else "N/A"
+                guarded_val = f"{guarded_m.median_us:.1f} µs" if guarded_m else "N/A"
+                diff = f"{max(0.0, guarded_m.median_us - bare_m.median_us):.1f} µs" if (bare_m and guarded_m) else "N/A"
+                print(f"  {pol:<10} {size:<8} {op:<10} {bare_val:>15} {guarded_val:>15} {diff:>12}")
+    print()
 
+    print("  Store Backend Comparison (InMemoryStore vs RedisMemoryStore):")
+    print(f"  {'Policy':<10} {'Size':<8} {'Operation':<10} {'InMemoryStore':>15} {'RedisMemoryStore':>20} {'Ratio':>10}")
+    print("  " + "-" * 80)
     for pol in perf_result.policies:
         for size in perf_result.sizes:
             for op in perf_result.operations:
@@ -985,11 +1120,11 @@ if __name__ == "__main__":
                 if perf_result.redis_available:
                     red_m = perf_result.data.get("RedisMemoryStore", {}).get(pol, {}).get(size, {}).get(op)
                     red_val = f"{red_m.median_us:.1f} µs" if red_m else "N/A"
-                    overhead = f"{red_m.median_us / mem_m.median_us:.1f}x" if (red_m and mem_m and mem_m.median_us > 0) else "N/A"
+                    ratio = f"{red_m.median_us / mem_m.median_us:.1f}x" if (red_m and mem_m and mem_m.median_us > 0) else "N/A"
                 else:
                     red_val = "N/A"
-                    overhead = "N/A"
-                print(f"  {pol:<10} {size:<8} {op:<10} {mem_val:>15} {red_val:>18} {overhead:>10}")
+                    ratio = "N/A"
+                print(f"  {pol:<10} {size:<8} {op:<10} {mem_val:>15} {red_val:>20} {ratio:>10}")
     print()
 
     output_dir = Path(__file__).parent / "results"
@@ -1001,6 +1136,18 @@ if __name__ == "__main__":
     perf_json: dict[str, Any] = {
         "redis_available": perf_result.redis_available,
         "redis_status": perf_result.redis_status,
+        "bare_store": {
+            size: {
+                op: {
+                    "median_us": m.median_us,
+                    "mean_us": m.mean_us,
+                    "p95_us": m.p95_us,
+                    "ops_per_sec": m.ops_per_sec,
+                }
+                for op, m in ops.items()
+            }
+            for size, ops in perf_result.bare_store_data.items()
+        },
         "stores": {},
     }
     for store_name, pols in perf_result.data.items():
@@ -1019,7 +1166,8 @@ if __name__ == "__main__":
                 }
 
     json_output = {
-        "version": amg_version,
+        "version": get_version_label(),
+        "date": get_benchmark_date(),
         "total_cases": result.total,
         "accuracy": round(result.accuracy, 4),
         "precision": round(result.precision, 4),
@@ -1032,6 +1180,9 @@ if __name__ == "__main__":
         "performance": perf_json,
         "details": result.details,
     }
-    (output_dir / "benchmark_results.json").write_text(json.dumps(json_output, indent=2))
-    print(f"  JSON results: {output_dir / 'benchmark_results.json'}")
+    try:
+        (output_dir / "benchmark_results.json").write_text(json.dumps(json_output, indent=2))
+        print(f"  JSON results: {output_dir / 'benchmark_results.json'}")
+    except Exception as exc:
+        print(f"  [WARN] Could not write benchmark_results.json: {exc}")
     print("  Done!")

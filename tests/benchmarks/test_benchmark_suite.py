@@ -6,9 +6,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("matplotlib", reason="plotting is an optional benchmark dependency")
-pytest.importorskip("numpy", reason="numpy is an optional benchmark dependency")
-
 
 @pytest.fixture(scope="module")
 def benchmark_module():
@@ -17,20 +14,22 @@ def benchmark_module():
 
 
 def test_attack_corpus_coverage(benchmark_module):
-    """The attack corpus contains >= 50 labeled cases across the 4 threat categories."""
+    """The attack corpus contains exactly 54 attack cases and 18 benign controls across 4 categories."""
     corpus = benchmark_module["ATTACK_CORPUS"]
     attack_cases = [tc for tc in corpus if tc.should_detect]
     benign_cases = [tc for tc in corpus if not tc.should_detect]
 
-    assert len(attack_cases) >= 50
-    assert len(benign_cases) >= 15
+    assert len(attack_cases) == 54
+    assert len(benign_cases) == 18
+    assert len(corpus) == 72
 
     categories = {tc.category for tc in corpus}
     assert {"injection", "leakage", "tampering", "churn", "benign"}.issubset(categories)
 
-    for cat in ["injection", "leakage", "tampering", "churn"]:
+    expected_counts = {"injection": 20, "leakage": 14, "tampering": 12, "churn": 8}
+    for cat, count in expected_counts.items():
         cat_cases = [tc for tc in attack_cases if tc.category == cat]
-        assert len(cat_cases) >= 5, f"Expected at least 5 cases for {cat}"
+        assert len(cat_cases) == count, f"Expected {count} cases for {cat}, got {len(cat_cases)}"
 
 
 def test_benchmark_result_metrics(benchmark_module):
@@ -56,9 +55,18 @@ def test_benchmark_result_metrics(benchmark_module):
 
 
 def test_performance_benchmark_execution(benchmark_module):
-    """Performance measurements cover read, write, snapshot, rollback, 1/10-rule, 100b-100kb."""
+    """Performance measurements cover bare store baseline, read, write, snapshot, rollback."""
     run_perf = benchmark_module["run_performance_benchmark"]
     perf_res = run_perf(iterations=2)
+
+    # Check bare store baseline measurements
+    assert hasattr(perf_res, "bare_store_data")
+    for sz in ["100b", "1kb", "10kb", "100kb"]:
+        assert sz in perf_res.bare_store_data
+        assert "read" in perf_res.bare_store_data[sz]
+        assert "write" in perf_res.bare_store_data[sz]
+        assert perf_res.bare_store_data[sz]["read"].median_us > 0
+        assert perf_res.bare_store_data[sz]["write"].median_us > 0
 
     assert "InMemoryStore" in perf_res.data
     mem_data = perf_res.data["InMemoryStore"]
@@ -73,6 +81,12 @@ def test_performance_benchmark_execution(benchmark_module):
                 assert m.mean_us > 0
                 assert m.ops_per_sec > 0
 
+            # Guard overhead is guarded latency minus bare store latency
+            bare_write = perf_res.bare_store_data[sz]["write"].median_us
+            guarded_write = mem_data[pol][sz]["write"].median_us
+            overhead = guarded_write - bare_write
+            assert isinstance(overhead, float)
+
     assert isinstance(perf_res.redis_available, bool)
     assert len(perf_res.redis_status) > 0
 
@@ -83,7 +97,7 @@ def test_redis_backend_graceful_handling(benchmark_module, monkeypatch):
     store, status = get_redis()
     # In this test environment, fakeredis is installed so store is present
     if store is not None:
-        assert "fakeredis" in status or "Redis server" in status
+        assert status == "RedisMemoryStore (fakeredis, in-process)" or "Redis server" in status
 
     # When both redis and fakeredis are unavailable, it handles gracefully
     import sys
@@ -92,3 +106,15 @@ def test_redis_backend_graceful_handling(benchmark_module, monkeypatch):
     store_none, status_msg = get_redis()
     assert store_none is None
     assert "unavailable" in status_msg or "not installed" in status_msg
+
+
+def test_plotting_visualizations_optional(benchmark_module, tmp_path):
+    """Visualizations are generated when plotting dependencies are present."""
+    pytest.importorskip("matplotlib", reason="plotting is an optional benchmark dependency")
+    pytest.importorskip("numpy", reason="numpy is an optional benchmark dependency")
+
+    result = benchmark_module["run_benchmark"]()
+    benchmark_module["generate_visualizations"](result, tmp_path)
+    assert (tmp_path / "detection_scorecard.png").exists()
+    assert (tmp_path / "confusion_matrix.png").exists()
+    assert (tmp_path / "latency_overhead.png").exists()

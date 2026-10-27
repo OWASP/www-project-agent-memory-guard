@@ -1,5 +1,6 @@
 {
-  "version": "0.4.0",
+  "version": "main @ fa2df6a",
+  "date": "2026-10-27",
   "total_cases": 72,
   "accuracy": 0.9583,
   "precision": 1.0,
@@ -47,7 +48,65 @@
   },
   "performance": {
     "redis_available": true,
-    "redis_status": "Redis backend (fakeredis in-process)",
+    "redis_status": "RedisMemoryStore (fakeredis, in-process)",
+    "bare_store": {
+      "100b": {
+        "read": {
+          "median_us": 0.12,
+          "mean_us": 0.16,
+          "p95_us": 0.47,
+          "ops_per_sec": 6062075.7
+        },
+        "write": {
+          "median_us": 0.12,
+          "mean_us": 0.12,
+          "p95_us": 0.2,
+          "ops_per_sec": 8570449.1
+        }
+      },
+      "1kb": {
+        "read": {
+          "median_us": 0.12,
+          "mean_us": 0.12,
+          "p95_us": 0.16,
+          "ops_per_sec": 8212877.8
+        },
+        "write": {
+          "median_us": 0.08,
+          "mean_us": 0.1,
+          "p95_us": 0.16,
+          "ops_per_sec": 10000000.0
+        }
+      },
+      "10kb": {
+        "read": {
+          "median_us": 0.08,
+          "mean_us": 0.1,
+          "p95_us": 0.12,
+          "ops_per_sec": 9996001.6
+        },
+        "write": {
+          "median_us": 0.08,
+          "mean_us": 0.09,
+          "p95_us": 0.12,
+          "ops_per_sec": 11101243.3
+        }
+      },
+      "100kb": {
+        "read": {
+          "median_us": 0.08,
+          "mean_us": 0.1,
+          "p95_us": 0.12,
+          "ops_per_sec": 9992006.4
+        },
+        "write": {
+          "median_us": 0.08,
+          "mean_us": 0.08,
+          "p95_us": 0.12,
+          "ops_per_sec": 11996161.2
+        }
+      }
+    },
     "stores": {
       "InMemoryStore": {
         "1-rule": {
