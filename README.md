@@ -111,22 +111,71 @@ Agent Memory Guard sits between the agent and its memory store, screening every 
 
 ## Benchmark results
 
-Measured on the project's 55-case benchmark: 40 representative attack payloads across 4 threat categories plus 15 benign controls (AMG 0.2.2, run of 2 May 2026; [full report](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/benchmarks/results/benchmark_report.md)):
+Measured on the project's labeled security benchmark: 54 representative attack payloads across 4 threat categories (injection, leakage, tampering, churn) plus 18 benign controls (main @ fa2df6a, run of 27 October 2026; [full report](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/benchmarks/results/benchmark_report.md)):
 
-| Metric | Value |
-|--------|-------|
-| **Detection rate (recall)** | 92.5% |
-| **Precision** | 100% |
-| **False positive rate** | 0% |
-| **Median latency** | 62 µs |
-| **F1 score** | 0.961 |
+Both configurations evaluate the 72-case corpus (54 attack payloads, 18 benign controls) using a custom `Policy` (`default_action=ALLOW`). The default out-of-the-box configuration activates 7 detectors (`prompt_injection`, `sensitive_data`, `size_anomaly`, `rapid_change`, `protected_key`, `cross_task_contamination`, `self_reinforcement`). The custom benchmark configuration adds the opt-in `memory_persistence_injection` detector (`MemoryPersistenceInjectionDetector`) to achieve the higher 94.4% recall result.
 
-| Attack category | Detection rate |
-|-----------------|----------------|
-| Prompt injection | 100% (15/15) |
-| Protected key tampering | 100% (8/8) |
-| Sensitive data leakage | 83% (10/12) |
-| Size anomaly | 80% (4/5) |
+| Configuration | Detectors | Recall (Detection Rate) | Precision | False Positive Rate | False Negative Rate | Missed / Total Attacks |
+|---------------|-----------|-------------------------|-----------|---------------------|---------------------|------------------------|
+| **Default configuration** (out of the box) | 7 | 85.2% | 100.0% | 0.0% | 14.8% | 8 / 54 |
+| **Custom configuration** (with opt-in detector) | 8 | 94.4% | 100.0% | 0.0% | 5.6% | 3 / 54 |
+
+> [!NOTE]
+> The out-of-the-box detector suite does not include `MemoryPersistenceInjectionDetector`. Enabling this opt-in detector alongside a matching policy rule (`default_action=ALLOW`) catches delayed-activation payloads, improving recall from 85.2% to 94.4% without false positives.
+
+### Confusion Matrix (Custom Configuration)
+
+| Actual \ Predicted | Detected (Positive) | Allowed (Negative) |
+|-------------------|---------------------|--------------------|
+| **Attack (Positive)** | 51 (TP) | 3 (FN) |
+| **Benign (Negative)** | 0 (FP) | 18 (TN) |
+
+*(Default configuration: 46 TP, 8 FN, 0 FP, 18 TN)*
+
+### Detection by Category
+
+| Attack category | Default configuration | Custom configuration (opt-in) |
+|-----------------|-----------------------|--------------------------------|
+| Injection | 75% (15/20) | 100% (20/20) |
+| Tampering | 100% (12/12) | 100% (12/12) |
+| Churn | 100% (8/8) | 100% (8/8) |
+| Leakage | 79% (11/14) | 79% (11/14) |
+
+### Performance Overhead
+
+Measurements are synthetic and local; they do not represent production agent operations or network latency. See the [full benchmark report](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/benchmarks/results/benchmark_report.md) for the complete 32-row matrix across all operations (read, write, snapshot, rollback) and payload sizes (100b, 1kb, 10kb, 100kb).
+
+#### Guard Overhead Baseline (1 KB & 100 KB Read/Write)
+
+`MemoryGuard` overhead is calculated as guarded latency minus unguarded bare `InMemoryStore` latency:
+
+| Policy | Payload Size | Operation | Unguarded Bare Store (µs) | Guarded MemoryGuard (µs) | Guard Overhead (µs) |
+|--------|--------------|-----------|---------------------------|--------------------------|---------------------|
+| 1-rule | 1 KB | read | 0.1 | 142.5 | 142.3 |
+| 1-rule | 1 KB | write | 0.1 | 143.7 | 143.6 |
+| 1-rule | 100 KB | read | 0.1 | 13723.9 | 13723.8 |
+| 1-rule | 100 KB | write | 0.1 | 13592.7 | 13592.6 |
+| 10-rule | 1 KB | read | 0.1 | 137.5 | 137.4 |
+| 10-rule | 1 KB | write | 0.1 | 138.9 | 138.8 |
+| 10-rule | 100 KB | read | 0.1 | 13658.3 | 13658.2 |
+| 10-rule | 100 KB | write | 0.1 | 13580.5 | 13580.4 |
+
+#### Store Backend Comparison (1 KB & 100 KB Read/Write)
+
+Comparison between backends under `MemoryGuard`. Limitations: `RedisMemoryStore` was measured using `fakeredis` in-process emulation; it does not measure network latency or a real Redis server.
+
+| Policy | Payload Size | Operation | InMemoryStore (µs) | RedisMemoryStore (fakeredis, in-process) (µs) | fakeredis / in-memory ratio (synthetic in-process, no network) |
+|--------|--------------|-----------|--------------------|-----------------------------------------------|----------------------------------------------------------------|
+| 1-rule | 1 KB | read | 142.5 | 216.9 | 1.5x |
+| 1-rule | 1 KB | write | 143.7 | 181.8 | 1.3x |
+| 1-rule | 100 KB | read | 13723.9 | 13846.1 | 1.0x |
+| 1-rule | 100 KB | write | 13592.7 | 13968.8 | 1.0x |
+| 10-rule | 1 KB | read | 137.5 | 216.2 | 1.6x |
+| 10-rule | 1 KB | write | 138.9 | 171.0 | 1.2x |
+| 10-rule | 100 KB | read | 13658.3 | 13939.3 | 1.0x |
+| 10-rule | 100 KB | write | 13580.5 | 13944.6 | 1.0x |
+
+*(See [full report](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/benchmarks/results/benchmark_report.md) for complete 32-row matrix including snapshot and rollback operations)*
 
 ```bash
 python benchmarks/security_benchmark.py   # reproduce locally
