@@ -62,7 +62,7 @@ class GuardedAutoGenAgent:
             if self._drop_blocked:
                 return False
             raise
-        if decision == Action.QUARANTINE:
+        if decision not in (Action.ALLOW, Action.REDACT):
             return False
         self._message_count += 1
         return True
@@ -121,6 +121,8 @@ def install_guard(
             if drop_blocked:
                 return True, ""
             raise
+        if decision in (Action.REQUIRE_APPROVAL, Action.REQUIRE_CORROBORATION):
+            return True, ""
         if decision != Action.ALLOW and drop_blocked:
             return True, ""
         return False, None
@@ -147,8 +149,10 @@ class GuardedGroupChatManager:
     def record_message(self, agent_name: str, message: dict) -> bool:
         key = f"autogen.group.{agent_name}.{len(self._agent_keys.get(agent_name, set()))}"
         try:
-            self.guard.write(key, str(message), source="autogen_group")
+            decision = self.guard.write(key, str(message), source="autogen_group")
         except PolicyViolation:
+            return False
+        if decision not in (Action.ALLOW, Action.REDACT):
             return False
         if agent_name not in self._agent_keys:
             self._agent_keys[agent_name] = set()

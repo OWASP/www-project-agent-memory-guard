@@ -68,6 +68,7 @@ nav:
       - Quick Start: getting-started/quickstart.md
       - Configuration: getting-started/configuration.md
       - Multi-Agent Access Control: getting-started/multi-agent.md
+      - Write Gates: write-gates.md
   - CLI:
       - Overview: cli/index.md
       - amg scan: cli/scan.md
