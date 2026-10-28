@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import itertools
+import json
 import logging
 import threading
 import time
@@ -1225,6 +1226,9 @@ class MemoryGuard:
 
         With access rules, the reader is checked first, before the guard looks for
         the key, so a denied reader cannot tell a missing key from a forbidden one.
+        Values covered by write gates are returned as detached JSON copies, so
+        readers cannot change committed memory without a gated write. Preexisting
+        values that do not satisfy the gate's JSON contract raise ValueError.
         """
 
         if (
@@ -1271,7 +1275,11 @@ class MemoryGuard:
             self._step("integrity", "sha-256 baseline", "match" if has_baseline else "no baseline")
 
         value = self._store.get(key, default)
-        if detach:
+        if self._policy.write_gate(key) is not None:
+            # Match the write gate's strict JSON contract, including preexisting
+            # values. A custom __deepcopy__ may return a mutable stored alias.
+            value = json.loads(encode_value(value))
+        elif detach:
             # A reader gets its own copy: changing it must not change the stored
             # value, which only the key's writers may do.
             value = _detach(value)

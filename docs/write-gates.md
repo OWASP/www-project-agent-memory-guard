@@ -47,6 +47,10 @@ omit its payload. Write-gate processing adds no payload to traces. Keys, custom
 detector output and other existing event fields still follow the application's
 own data-minimization policy.
 
+Reads of gated keys return fresh copies under the same finite JSON contract,
+even without access rules. Preexisting values outside that contract are rejected
+rather than exposed as mutable references into committed memory.
+
 ## Corroboration
 
 ```python

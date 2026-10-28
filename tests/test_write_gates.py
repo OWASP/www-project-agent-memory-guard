@@ -81,6 +81,72 @@ def test_pending_is_not_committed_and_approval_uses_the_original_actor(path):
         guard.approve(proposal.write_id, digest=proposal.digest)
 
 
+@pytest.mark.parametrize("path", ["legacy", "principal", "handle", "ambient", "trace"])
+@pytest.mark.parametrize("action", [Action.REQUIRE_APPROVAL, Action.REQUIRE_CORROBORATION])
+def test_gated_reads_cannot_mutate_committed_values_before_or_after_resolution(path, action):
+    shared = {"names": ["original"]}
+    store = InMemoryStore({"settings.delivery": {"first": shared, "second": shared}})
+    # Write gates are sufficient on their own; no access policy is required.
+    guard = MemoryGuard(store, policy=policy(action), trace=path == "trace", detectors=[])
+    handle = guard.as_agent("agent")
+
+    def read():
+        if path == "principal":
+            return guard.read("settings.delivery", principal="agent")
+        if path == "handle":
+            return handle.read("settings.delivery")
+        if path == "ambient":
+            with handle:
+                return guard.read("settings.delivery")
+        return guard.read("settings.delivery")
+
+    proposed = {"first": {"names": ["approved"]}, "second": {"names": ["approved"]}}
+    assert guard.write("settings.delivery", proposed) == action
+    (proposal,) = guard.pending_writes
+    original_view = read()
+    original_view["first"]["names"].append("unapproved")
+    original_view["second"]["names"].append("also-unapproved")
+    original = {"first": {"names": ["original"]}, "second": {"names": ["original"]}}
+    assert store.get("settings.delivery") == original
+    assert read() == original
+    assert len(guard.pending_writes) == 1
+
+    if action == Action.REQUIRE_APPROVAL:
+        assert guard.approve(proposal.write_id, digest=proposal.digest) == Action.ALLOW
+    else:
+        assert guard.corroborate(
+            proposal.write_id, digest=proposal.digest, source_domain="document:one"
+        ) == Action.REQUIRE_CORROBORATION
+        assert guard.corroborate(
+            proposal.write_id, digest=proposal.digest, source_domain="document:two"
+        ) == Action.ALLOW
+    committed_view = read()
+    committed_view["first"]["names"].append("unapproved")
+    committed_view["second"]["names"].append("also-unapproved")
+    assert store.get("settings.delivery") == proposed
+    assert read() == proposed
+    assert not guard.pending_writes
+
+
+def test_gated_reads_fail_closed_for_preexisting_custom_values_without_changing_ungated_reads():
+    class Mutable:
+        def __init__(self):
+            self.names = []
+
+        def __deepcopy__(self, memo):
+            return self
+
+    value = Mutable()
+    store = InMemoryStore({"settings.custom": value, "ordinary.custom": value})
+    guard = MemoryGuard(store, policy=policy(), detectors=[])
+    assert guard.read("ordinary.custom") is value
+    with pytest.raises(ValueError, match="finite JSON values"):
+        guard.read("settings.custom")
+    with pytest.raises(ValueError, match="finite JSON values"):
+        guard.as_agent("agent").read("settings.custom")
+    assert value.names == []
+
+
 def test_pending_new_key_is_absent_from_reads_keys_and_snapshots():
     store = InMemoryStore()
     guard = MemoryGuard(store, policy=policy(), detectors=[])

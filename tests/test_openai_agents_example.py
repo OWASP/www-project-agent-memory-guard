@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_memory_guard import MemoryGuard, Policy
+from agent_memory_guard import Action, MemoryGuard, Policy, WriteGateRule
 
 
 def _load_example():
@@ -40,4 +40,20 @@ def test_remember_tool_output_commits_clean_value(example) -> None:
     memory = example.GuardedSessionMemory(guard=MemoryGuard(policy=Policy.strict()))
     assert memory.remember_tool_output("calc", "2+2=4") is True
     assert memory.recall("calc") == "2+2=4"
+    assert memory.pending_hitl() == []
+
+
+@pytest.mark.parametrize("action", [Action.REQUIRE_APPROVAL, Action.REQUIRE_CORROBORATION])
+def test_pending_tool_output_does_not_report_commit_or_update_scratch(example, action) -> None:
+    guard = MemoryGuard(policy=Policy(), detectors=[])
+    memory = example.GuardedSessionMemory(guard=guard)
+    assert memory.remember_tool_output("lookup", "previous committed value") is True
+    guard.policy.write_gates = (WriteGateRule("review_tool", ("openai_agents.tool.*",), action=action),)
+
+    assert memory.remember_tool_output("lookup", "unapproved proposal") is False
+    assert memory.recall("lookup") == "previous committed value"
+    assert guard.read("openai_agents.tool.lookup") == "previous committed value"
+    assert len(guard.pending_writes) == 1
+    assert guard.pending_writes[0].value == "unapproved proposal"
+    # Pending proposals already belong to the host-controlled guard lifecycle.
     assert memory.pending_hitl() == []
