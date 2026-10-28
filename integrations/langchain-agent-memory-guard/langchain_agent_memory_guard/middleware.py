@@ -11,14 +11,11 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain.agents.middleware.types import (
     AgentMiddleware,
-    ModelRequest,
-    ModelResponse,
 )
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
-from langgraph.typing import ContextT
 from typing_extensions import TypeVar
 
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation
@@ -112,7 +109,10 @@ class MemoryGuardMiddleware(AgentMiddleware):
             violations were detected.
         """
         try:
-            self._guard.write(f"__scan__{source}", text, source="middleware")
+            decision = self._guard.write(f"__scan__{source}", text, source="middleware")
+            if decision.value in ("require_approval", "require_corroboration"):
+                # A pending gate cannot be overridden by warn/strip mode.
+                raise MemoryGuardViolation(f"Memory write is pending: {decision.value}")
             # Clean up the temporary key
             self._guard.delete(f"__scan__{source}")
             return (True, "")

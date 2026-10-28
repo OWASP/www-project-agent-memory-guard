@@ -6,8 +6,11 @@ import dataclasses
 import itertools
 import logging
 import threading
+import time
+import uuid
 import weakref
 from collections.abc import Container, Iterable
+from contextlib import nullcontext
 from typing import Any, Callable, NoReturn
 
 from agent_memory_guard.classification import (
@@ -56,6 +59,14 @@ from agent_memory_guard.policies.policy import Policy, merge_protected_keys
 from agent_memory_guard.storage.memory_store import InMemoryStore, MemoryStore
 from agent_memory_guard.storage.snapshots import Snapshot, SnapshotStore
 from agent_memory_guard.trace import TraceStep
+from agent_memory_guard.write_gates import (
+    PendingWrite,
+    PendingWriteError,
+    WriteGateRule,
+    _PendingRecord,
+    encode_value,
+    proposal_digest,
+)
 
 log = logging.getLogger("agent_memory_guard")
 
@@ -122,6 +133,7 @@ class MemoryGuard:
         promotion_rules: PromotionRules | None = None,
         current_task: str | None = None,
         trace: bool = False,
+        max_pending_writes: int = 100,
     ) -> None:
         self._guard_id = next(_GUARD_IDS)
         self._trace_on = bool(trace)
@@ -136,6 +148,11 @@ class MemoryGuard:
         self._events: list[SecurityEvent] = []
         self._snapshot_on_block = snapshot_on_block
         self._quarantine: dict[str, Any] = {}
+        if type(max_pending_writes) is not int or max_pending_writes < 1:
+            raise ValueError("max_pending_writes must be a positive integer")
+        self._max_pending_writes = max_pending_writes
+        self._pending_writes: dict[str, _PendingRecord] = {}
+        self._gate_write_depth = 0
         self._classification = ClassificationRegistry()
         self._promotion_rules = promotion_rules or PromotionRules()
         self._current_task = current_task
@@ -189,6 +206,10 @@ class MemoryGuard:
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("_lock", None)
+        # Approval authority and proposals belong to one live guard. A copy or
+        # unpickled instance must not inherit another instance's pending work.
+        state.pop("_pending_writes", None)
+        state.pop("_gate_write_depth", None)
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -199,6 +220,9 @@ class MemoryGuard:
         self.__dict__.setdefault("_written_by", {})
         self._guard_id = next(_GUARD_IDS)
         self._lock = threading.RLock()
+        self._pending_writes = {}
+        self._gate_write_depth = 0
+        self.__dict__.setdefault("_max_pending_writes", 100)
         self._track_trace()
 
     # ---- identity and access ------------------------------------------
@@ -341,21 +365,24 @@ class MemoryGuard:
         explicit: str | None,
         gate: Callable[[ActingContext], None] | None,
         body: Callable[[ActingContext], Any],
+        *,
+        _context: ActingContext | None = None,
     ) -> Any:
         """Run one public operation: resolve identity, check access, record the trace."""
-        ctx = self._resolve(explicit)
+        ctx = _context if _context is not None else self._resolve(explicit)
         if (
             ctx.principal is None
             and not self._trace_on
             and self._access_policy() is None
             and self._op_state() is None
         ):
-            return body(ctx)  # the 0.3 path: nothing to check, attribute or record
+            with self._lock if self._gate_active() and operation in _LOCKED_OPS else nullcontext():
+                return body(ctx)  # no identity or trace work
         steps: list[TraceStep] | None = [] if self._trace_on else None
         state = _OpState(self._guard_id, ctx, steps, per_event=operation == "retire")
         token = _OP.set(state)
         access = self._access_policy()
-        lock = self._lock if access is not None and operation in _LOCKED_OPS else None
+        lock = self._lock if (access is not None or self._gate_active()) and operation in _LOCKED_OPS else None
         try:
             if steps is not None:
                 steps.append(TraceStep("identity", ctx.principal or "<anonymous>", f"via {ctx.via}"))
@@ -542,8 +569,11 @@ class MemoryGuard:
 
     def set_current_task(self, task_id: str | None) -> None:
         """Switch the task context used for cross-task contamination checks."""
-        self._current_task = task_id
-        self._cross_task_detector.set_current_task(task_id)
+        with self._lock:
+            if task_id != self._current_task:
+                self._invalidate_pending(reason="task context changed")
+            self._current_task = task_id
+            self._cross_task_detector.set_current_task(task_id)
 
     def classify(self, key: str) -> MemoryClass | None:
         """Return the current classification of a key, or None if unclassified."""
@@ -656,6 +686,7 @@ class MemoryGuard:
         self._classification.set(
             key, target, task_id=self._classification.task_of(key)
         )
+        self._invalidate_pending(key, reason="target classification changed")
         self._emit(
             detector="classification",
             severity=Severity.INFO,
@@ -681,7 +712,12 @@ class MemoryGuard:
             if key not in self._store:
                 raise KeyError(f"Cannot baseline missing key '{key}'")
             value = self._store.get(key)
-        return self._integrity.baseline(key, value)
+        with self._lock:
+            previous = self._integrity.expected(key)
+            digest = self._integrity.baseline(key, value)
+            if previous != digest:
+                self._invalidate_pending(key, reason="integrity baseline changed")
+            return digest
 
     def verify(self, key: str) -> None:
         """Raise IntegrityError if `key` no longer matches its baseline."""
@@ -698,6 +734,182 @@ class MemoryGuard:
                 drifted.append(key)
         return drifted
 
+    # ---- trusted-host write gate control -----------------------------
+
+    def _gate_active(self) -> bool:
+        return bool(self._policy.write_gates or self._pending_writes)
+
+    @property
+    def pending_writes(self) -> tuple[PendingWrite, ...]:
+        """Return detached pending proposals for the trusted host, not agents."""
+        with self._lock:
+            self.expire_pending()
+            return tuple(dataclasses.replace(record.proposal, corroborations=len(record.domains))
+                         for record in self._pending_writes.values())
+
+    def expire_pending(self) -> tuple[str, ...]:
+        """Remove expired proposals without committing them; return their ids."""
+        with self._lock:
+            expired = [record for record in self._pending_writes.values()
+                       if not record.resolving and record.proposal.expires_at <= time.time()]
+            for record in expired:
+                self._pending_writes.pop(record.proposal.write_id, None)
+                self._gate_event(record, "expired")
+            return tuple(record.proposal.write_id for record in expired)
+
+    def approve(self, write_id: str, *, digest: str) -> Action:
+        """Approve the exact proposal from trusted host code, after human review.
+
+        Do not expose this method as an agent tool. It checks the original
+        writer's current access, detectors and target before committing once.
+        """
+        with self._lock:
+            record = self._pending_record(write_id, digest)
+            if record.gate.action != Action.REQUIRE_APPROVAL:
+                raise PendingWriteError("This proposal requires corroboration, not approval")
+            return self._commit_pending(record)
+
+    def corroborate(
+        self, write_id: str, *, digest: str, source_domain: str,
+        source_class: SourceClass | str = SourceClass.SYSTEM,
+    ) -> Action:
+        """Attest independent evidence for an exact proposal from trusted code.
+
+        The application must authenticate the source and derive a stable
+        provenance domain; copied/related sources must share one domain. Neither
+        this string nor SourceClass authenticates a source. Agent write metadata
+        is never counted as corroboration.
+        """
+        with self._lock:
+            record = self._pending_record(write_id, digest)
+            if record.gate.action != Action.REQUIRE_CORROBORATION:
+                raise PendingWriteError("This proposal requires human approval")
+            cls = SourceClass(source_class)
+            if cls not in record.gate.trusted_source_classes:
+                raise PendingWriteError("This source class is not trusted for corroboration")
+            if (type(source_domain) is not str or not source_domain.strip()
+                    or source_domain != source_domain.strip()
+                    or len(source_domain) > 200 or any(ord(char) < 32 for char in source_domain)):
+                raise ValueError("source_domain must be a nonempty, bounded provenance id")
+            if source_domain not in record.domains:
+                record.domains.add(source_domain)
+                self._gate_event(record, "corroborated")
+            if len(record.domains) < record.gate.corroborations:
+                return Action.REQUIRE_CORROBORATION
+            return self._commit_pending(record)
+
+    def reject(self, write_id: str, *, digest: str) -> None:
+        """Reject an exact proposal from trusted host code without committing."""
+        with self._lock:
+            record = self._pending_record(write_id, digest)
+            self._pending_writes.pop(write_id)
+            self._gate_event(record, "rejected")
+
+    def _pending_record(self, write_id: str, digest: str) -> _PendingRecord:
+        if self._gate_write_depth:
+            raise PendingWriteError("Resolve pending writes after the active write returns")
+        self.expire_pending()
+        record = self._pending_writes.get(write_id)
+        if record is None:
+            raise PendingWriteError("Unknown, expired or already resolved pending write")
+        if record.resolving:
+            raise PendingWriteError("This pending write is already being resolved")
+        if digest != record.proposal.digest:
+            raise PendingWriteError("The digest does not match this pending write")
+        return record
+
+    def _target_state(self, key: str) -> tuple[Any, ...]:
+        present = key in self._store
+        value = encode_value(self._store.get(key)) if present else None
+        return (present, value, self._classification.get(key),
+                self._classification.task_of(key), self._written_by.get(key), self._current_task,
+                self._integrity.expected(key))
+
+    def _hold_write(
+        self, gate: WriteGateRule, key: str, value: Any, *, principal: str | None,
+        source: str, source_class: SourceClass, source_type: SourceType,
+        receipt_uri: str | None, cls: MemoryClass | str | None, task_id: str | None,
+    ) -> Action:
+        self.expire_pending()
+        if len(self._pending_writes) >= self._max_pending_writes:
+            raise PendingWriteError("Pending write capacity reached; resolve existing proposals first")
+        value_json = encode_value(value)
+        effective_task = task_id if task_id is not None else self._classification.task_of(key) or self._current_task
+        now = time.time()
+        proposal = PendingWrite(
+            write_id=str(uuid.uuid4()), key=key, principal=principal, task_id=effective_task,
+            action=gate.action, rule=gate.name,
+            digest=proposal_digest(value_json, key, principal, effective_task),
+            created_at=now, expires_at=now + gate.ttl_seconds,
+            required_corroborations=gate.corroborations if gate.action == Action.REQUIRE_CORROBORATION else 0,
+            _value_json=value_json,
+        )
+        state = self._op_state()
+        record = _PendingRecord(proposal, gate, copy.deepcopy(self._policy), self._target_state(key),
+                                source, source_class, source_type, receipt_uri, cls,
+                                state.ctx.via if state is not None else "anonymous")
+        self._pending_writes[proposal.write_id] = record
+        self._gate_event(record, "pending")
+        return gate.action
+
+    def _validate_pending(self, record: _PendingRecord) -> None:
+        proposal = record.proposal
+        if self._pending_writes.get(proposal.write_id) is not record:
+            raise PendingWriteError("This pending write is no longer active")
+        if proposal.expires_at <= time.time():
+            self._pending_writes.pop(proposal.write_id)
+            self._gate_event(record, "expired")
+            raise PendingWriteError("This pending write has expired")
+        if self._policy != record.policy or self._target_state(proposal.key) != record.target:
+            self._pending_writes.pop(proposal.write_id)
+            self._gate_event(record, "invalidated")
+            raise PendingWriteError("The policy, target or task changed; submit a new proposal")
+
+    def _commit_pending(self, record: _PendingRecord) -> Action:
+        proposal = record.proposal
+        self._validate_pending(record)
+        record.resolving = True
+        self._gate_write_depth += 1
+        try:
+            result = self._write(
+                proposal.key, proposal.value, principal=proposal.principal,
+                source=record.source, source_class=record.source_class,
+                source_type=record.source_type, receipt_uri=record.receipt_uri,
+                cls=record.cls, task_id=proposal.task_id, _resolution=record,
+            )
+            if result in (Action.ALLOW, Action.REDACT):
+                self._pending_writes.pop(proposal.write_id)
+                self._gate_event(record, "committed")
+            return result
+        finally:
+            self._gate_write_depth -= 1
+            record.resolving = False
+
+    def _invalidate_pending(
+        self, key: str | None = None, *, reason: str, except_id: str | None = None,
+    ) -> None:
+        records = [record for identity, record in self._pending_writes.items()
+                   if identity != except_id and (key is None or record.proposal.key == key)]
+        for record in records:
+            self._pending_writes.pop(record.proposal.write_id, None)
+            self._gate_event(record, "invalidated", reason=reason)
+
+    def _gate_event(self, record: _PendingRecord, status: str, *, reason: str = "") -> None:
+        # Event handlers may enqueue a host decision, but cannot synchronously
+        # resolve another proposal while this transition is being dispatched.
+        self._gate_write_depth += 1
+        try:
+            self._emit(
+                detector="write_gate", severity=Severity.INFO, action=record.gate.action,
+                operation="write_gate", key=record.proposal.key,
+                message=f"Pending write {status}", source_class=SourceClass.SYSTEM,
+                metadata={"write_id": record.proposal.write_id, "digest": record.proposal.digest,
+                          "rule": record.gate.name, "status": status, "reason": reason,
+                          "corroborations": len(record.domains)},
+            )
+        finally:
+            self._gate_write_depth -= 1
+
     def write(
         self,
         key: str,
@@ -710,6 +922,39 @@ class MemoryGuard:
         cls: MemoryClass | str | None = None,
         task_id: str | None = None,
         principal: str | None = None,
+    ) -> Action:
+        """Screen a write; gated writes remain pending and are not committed.
+
+        Only ALLOW and REDACT indicate a committed write. The trusted host can
+        inspect :attr:`pending_writes` and resolve a gate; AgentHandle exposes
+        no resolution methods. See ``docs/write-gates.md`` for the trust model.
+        """
+        if not self._gate_active():
+            return self._write(key, value, source=source, source_class=source_class,
+                               source_type=source_type, receipt_uri=receipt_uri,
+                               cls=cls, task_id=task_id, principal=principal)
+        with self._lock:
+            self._gate_write_depth += 1
+            try:
+                return self._write(key, value, source=source, source_class=source_class,
+                                   source_type=source_type, receipt_uri=receipt_uri,
+                                   cls=cls, task_id=task_id, principal=principal)
+            finally:
+                self._gate_write_depth -= 1
+
+    def _write(
+        self,
+        key: str,
+        value: Any,
+        *,
+        source: str = "agent",
+        source_class: SourceClass | str | None = None,
+        source_type: SourceType = SourceType.UNKNOWN,
+        receipt_uri: str | None = None,
+        cls: MemoryClass | str | None = None,
+        task_id: str | None = None,
+        principal: str | None = None,
+        _resolution: _PendingRecord | None = None,
     ) -> Action:
         """Inspect and (if policy allows) commit a write. Returns the action taken.
 
@@ -753,6 +998,7 @@ class MemoryGuard:
             action = self._write_impl(
                 key, value, source=source, source_class=source_class, source_type=source_type,
                 receipt_uri=receipt_uri, cls=cls, task_id=task_id,
+                principal=None, resolution=_resolution,
             )
             if self._written_by and action in (Action.ALLOW, Action.REDACT):
                 self._written_by.pop(key, None)  # the last write was anonymous
@@ -768,12 +1014,15 @@ class MemoryGuard:
             action = self._write_impl(
                 key, stored, source=src, source_class=source_class, source_type=source_type,
                 receipt_uri=receipt_uri, cls=cls, task_id=task_id,
+                principal=ctx.principal, resolution=_resolution,
             )
             if action in (Action.ALLOW, Action.REDACT):
                 self._written_by[key] = ctx.principal
             return action
 
-        return self._run("write", key, principal, gate, body)  # type: ignore[no-any-return]
+        context = (ActingContext(self._guard_id, _resolution.proposal.principal, _resolution.via)
+                   if _resolution is not None else None)
+        return self._run("write", key, principal, gate, body, _context=context)  # type: ignore[no-any-return]
 
     def _write_impl(
         self,
@@ -786,6 +1035,8 @@ class MemoryGuard:
         receipt_uri: str | None,
         cls: MemoryClass | str | None,
         task_id: str | None,
+        principal: str | None,
+        resolution: _PendingRecord | None = None,
     ) -> Action:
         # Resolve source_class: explicit source_class takes priority,
         # otherwise map from source_type for backward compatibility
@@ -911,7 +1162,22 @@ class MemoryGuard:
                 receipt_uri=receipt_uri,
             )
 
+        gate = self._policy.write_gate(key)
+        if gate is not None and resolution is None:
+            return self._hold_write(gate, key, committed_value, principal=principal,
+                                    source=source, source_class=normalised_source_class,
+                                    source_type=source_type, receipt_uri=receipt_uri,
+                                    cls=cls, task_id=task_id)
+        if resolution is not None:
+            self._validate_pending(resolution)
+            proposal = resolution.proposal
+            if gate != resolution.gate or proposal_digest(
+                encode_value(committed_value), key, principal, proposal.task_id
+            ) != proposal.digest:
+                raise PendingWriteError("Revalidation changed the approved proposal")
         self._store.set(key, committed_value)
+        self._invalidate_pending(key, reason="target was written",
+                                 except_id=resolution.proposal.write_id if resolution else None)
         if self._trace_on:
             self._step("commit", key, "stored redacted" if decision == Action.REDACT else "stored")
 
@@ -1085,9 +1351,10 @@ class MemoryGuard:
             and self._guard_id not in _ANCHORED
             and getattr(self._policy, "access", None) is None
         ):  # the 0.3 path: nothing to check, attribute or record
-            self._delete_impl(key)
-            if self._written_by:
-                self._written_by.pop(key, None)
+            with self._lock if self._gate_active() else nullcontext():
+                self._delete_impl(key)
+                if self._written_by:
+                    self._written_by.pop(key, None)
             return
 
         def gate(ctx: ActingContext) -> None:
@@ -1112,6 +1379,7 @@ class MemoryGuard:
             )
             raise PolicyViolation(f"Delete of '{key}' blocked", key=key)
         self._store.delete(key)
+        self._invalidate_pending(key, reason="target was deleted")
         self._integrity.clear(key)
         self._classification.clear(key)
         self._self_reinforcement_detector.reset(key)
@@ -1174,6 +1442,7 @@ class MemoryGuard:
             if not should_retire:
                 continue
             self._store.delete(key)
+            self._invalidate_pending(key, reason="target was retired")
             self._integrity.clear(key)
             self._classification.clear(key)
             self._self_reinforcement_detector.reset(key)
@@ -1316,6 +1585,7 @@ class MemoryGuard:
         else:  # a snapshot from before 0.4: labels stay as they are, last writers are unknown
             self._written_by = {}
         self._step("restore", f"snapshot {snap.snapshot_id} ({snap.label})", "restored")
+        self._invalidate_pending(reason="memory was rolled back")
 
         self._emit(
             detector="rollback",
