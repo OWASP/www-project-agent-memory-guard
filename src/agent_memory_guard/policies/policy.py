@@ -191,6 +191,7 @@ class Policy:
             protected_keys=("identity.*", "system.*", "agent.goal"),
             rules=[
                 PolicyRule("block_injection", "prompt_injection", Action.BLOCK),
+                PolicyRule("block_ml_injection", "ml_injection", Action.BLOCK),
                 PolicyRule("redact_secrets", "sensitive_data", Action.REDACT),
                 PolicyRule("block_protected_key", "protected_key", Action.BLOCK),
                 PolicyRule("quarantine_size_anomaly", "size_anomaly", Action.QUARANTINE),
@@ -206,6 +207,8 @@ class Policy:
         Maps memory-class key namespaces to detector-specific actions, so
         e.g. a ``prompt_injection`` finding inside ``credentials.*`` is blocked
         while the same finding inside ``facts.*`` is quarantined for review.
+        ``ml_injection`` findings get the same action as ``prompt_injection``
+        in every namespace.
 
         Key namespaces (matched as ``fnmatch`` patterns):
         - ``credentials.*`` — block ``prompt_injection`` and ``sensitive_data``;
@@ -245,6 +248,12 @@ class Policy:
                     keys=("credentials.*",),
                 ),
                 PolicyRule(
+                    "block_credential_ml_injection",
+                    "ml_injection",
+                    Action.BLOCK,
+                    keys=("credentials.*",),
+                ),
+                PolicyRule(
                     "block_credential_sensitive",
                     "sensitive_data",
                     Action.BLOCK,
@@ -254,6 +263,12 @@ class Policy:
                 PolicyRule(
                     "block_permission_injection",
                     "prompt_injection",
+                    Action.BLOCK,
+                    keys=("permissions.*",),
+                ),
+                PolicyRule(
+                    "block_permission_ml_injection",
+                    "ml_injection",
                     Action.BLOCK,
                     keys=("permissions.*",),
                 ),
@@ -270,10 +285,22 @@ class Policy:
                     Action.BLOCK,
                     keys=("policies.*",),
                 ),
+                PolicyRule(
+                    "block_policy_ml_injection",
+                    "ml_injection",
+                    Action.BLOCK,
+                    keys=("policies.*",),
+                ),
                 # facts.* — trusted, quarantine
                 PolicyRule(
                     "quarantine_fact_injection",
                     "prompt_injection",
+                    Action.QUARANTINE,
+                    keys=("facts.*",),
+                ),
+                PolicyRule(
+                    "quarantine_fact_ml_injection",
+                    "ml_injection",
                     Action.QUARANTINE,
                     keys=("facts.*",),
                 ),
@@ -298,6 +325,12 @@ class Policy:
                     keys=("tool_results.*",),
                 ),
                 PolicyRule(
+                    "block_tool_result_ml_injection",
+                    "ml_injection",
+                    Action.BLOCK,
+                    keys=("tool_results.*",),
+                ),
+                PolicyRule(
                     "quarantine_tool_result_anomaly",
                     "size_anomaly",
                     Action.QUARANTINE,
@@ -312,6 +345,7 @@ class Policy:
                 ),
                 # Global catch-all rules
                 PolicyRule("block_injection", "prompt_injection", Action.BLOCK),
+                PolicyRule("block_ml_injection", "ml_injection", Action.BLOCK),
                 PolicyRule("redact_secrets", "sensitive_data", Action.REDACT),
                 PolicyRule("block_protected_key", "protected_key", Action.BLOCK),
                 PolicyRule("quarantine_size_anomaly", "size_anomaly", Action.QUARANTINE),
