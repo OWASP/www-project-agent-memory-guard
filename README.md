@@ -24,7 +24,7 @@
 
 <div align="center">
 
-### 📦 22,196 PyPI downloads · 17,394 repository clones · 39,590 total
+### 📦 22,473 PyPI downloads · 17,485 repository clones · 39,958 total
 
 [![GitHub stars](https://img.shields.io/github/stars/OWASP/www-project-agent-memory-guard?style=social)](https://github.com/OWASP/www-project-agent-memory-guard) [![GitHub forks](https://img.shields.io/github/forks/OWASP/www-project-agent-memory-guard?style=social)](https://github.com/OWASP/www-project-agent-memory-guard/fork) [![agent-memory-guard on PyPI](https://pepy.tech/badge/agent-memory-guard)](https://pepy.tech/project/agent-memory-guard) [![langchain-agent-memory-guard on PyPI](https://pepy.tech/badge/langchain-agent-memory-guard)](https://pepy.tech/project/langchain-agent-memory-guard) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard) [![Unique Cloners](https://img.shields.io/badge/dynamic/json?color=success&label=Unique%20Cloners&query=uniques&url=https://gist.githubusercontent.com/vgudur-dev/c04e12f68c363625faf12faaf03a03ca/raw/clone.json&logo=github)](https://github.com/OWASP/www-project-agent-memory-guard/graphs/traffic)
 
