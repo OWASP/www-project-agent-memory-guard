@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openclaw-agent-memory-guard"
+version = "0.1.0"
+description = "OWASP Agent Memory Guard adapter for OpenClaw and Hermes Agent Markdown memory files (MEMORY.md, USER.md, memory/*.md): out-of-band scan, per-entry verdicts, snapshots"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+authors = [
+    {name = "OWASP Agent Memory Guard Contributors"},
+]
+keywords = ["openclaw", "hermes-agent", "owasp", "ai-security", "agent-memory", "memory-poisoning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "agent-memory-guard>=0.3.2",
+]
+
+[project.scripts]
+amg-openclaw = "openclaw_agent_memory_guard.cli:main"
+
+[project.urls]
+Homepage = "https://owasp.org/www-project-agent-memory-guard/"
+Repository = "https://github.com/OWASP/www-project-agent-memory-guard"
+Documentation = "https://github.com/OWASP/www-project-agent-memory-guard/tree/main/integrations/openclaw-agent-memory-guard"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openclaw_agent_memory_guard"]
