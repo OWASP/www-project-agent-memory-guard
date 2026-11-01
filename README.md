@@ -356,6 +356,12 @@ guard.write(
 )
 ```
 
+`receipt_uri` is operator-supplied: AMG never anchors anything itself. See
+[`examples/action_ref_receipt_binding.py`](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/examples/action_ref_receipt_binding.py)
+for an end-to-end worked example — compute a content-addressed `action_ref`
+for the write, anchor it externally, and pass the resulting link back in as
+`receipt_uri`.
+
 The four classes — `external_tool`, `user_input`, `agent_authored`, `system` — travel with every `SecurityEvent` for SIEM correlation.
 
 ### Self-reinforcement cool-down
