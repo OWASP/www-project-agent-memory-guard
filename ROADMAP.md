@@ -30,7 +30,7 @@ Community contributions are welcome for any item below.
 | Feature | Description | Status |
 |---------|-------------|--------|
 | Multi-agent security | Cross-agent memory isolation and trust boundaries | Planned |
-| OWASP Lab promotion | Apply for Lab project status | Planned |
+| OWASP Lab promotion | Lab project status | Done (November 2026) |
 | Formal verification | Prove policy correctness properties | Research |
 | Enterprise features | RBAC, audit trails, compliance reporting | Planned |
 

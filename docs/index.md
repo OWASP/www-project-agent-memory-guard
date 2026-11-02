@@ -82,7 +82,7 @@ pip install agent-memory-guard[all]
 
 ## OWASP Alignment
 
-Agent Memory Guard is an **OWASP Incubator Project** that directly addresses threats identified in the OWASP Agentic Security Initiative:
+Agent Memory Guard is an **OWASP Lab Project** that directly addresses threats identified in the OWASP Agentic Security Initiative:
 
 | OWASP Threat ID | Threat Name | AMG Coverage |
 |-----------------|-------------|--------------|

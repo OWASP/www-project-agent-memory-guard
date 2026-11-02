@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/langchain-agent-memory-guard)](https://pypi.org/project/langchain-agent-memory-guard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/LICENSE)
-[![OWASP](https://img.shields.io/badge/OWASP-Incubator-blue)](https://owasp.org/www-project-agent-memory-guard/)
+[![OWASP](https://img.shields.io/badge/OWASP-Lab-blue)](https://owasp.org/www-project-agent-memory-guard/)
 
 **LangChain middleware integration for [OWASP Agent Memory Guard](https://github.com/OWASP/www-project-agent-memory-guard)** — runtime defense against AI agent memory poisoning attacks (OWASP ASI06).
 

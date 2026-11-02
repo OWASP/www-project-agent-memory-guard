@@ -1,5 +1,5 @@
 ### Agent Memory Guard Information
-* [Incubator Project](https://owasp.org/projects/)
+* [Lab Project](https://owasp.org/projects/)
 * Type: Code
 * Classification: Defender, Builder
 * [![Latest release](https://img.shields.io/pypi/v/agent-memory-guard?label=latest%20release)](https://pypi.org/project/agent-memory-guard/)

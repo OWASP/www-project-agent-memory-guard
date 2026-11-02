@@ -23,7 +23,7 @@ The Agent Security Bench reports a highest average attack success rate of 84.30%
 | **Focus** | Write-time and read-time memory screening |
 | **Architecture** | Drop-in middleware between agent and memory store |
 | **License** | Apache 2.0 (fully open source) |
-| **Backing** | OWASP Incubator Project |
+| **Backing** | OWASP Lab Project |
 | **Install** | `pip install agent-memory-guard` |
 | **Stars** | 44 (growing) |
 | **Downloads** | 5,800+ |
