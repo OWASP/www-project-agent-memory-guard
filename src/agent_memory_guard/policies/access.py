@@ -41,7 +41,7 @@ import fnmatch
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 from agent_memory_guard.classification import MemoryClass
 from agent_memory_guard.identity import check_id, is_valid_id
@@ -414,33 +414,11 @@ class AccessPolicy:
         current_class: MemoryClass | None = None,
         target_class: MemoryClass | None = None,
     ) -> bool:
-        """Fast path: the same answer as ``decide(...).allowed``, building nothing."""
-        if operation not in OPERATIONS:
-            raise ValueError(f"Unknown operation {operation!r}; expected one of {sorted(OPERATIONS)}")
-        reg = self._registry
-        if principal is not None and reg and principal not in reg:
-            return False
-        roles = reg.get(principal, _NO_ROLES) if principal is not None else _NO_ROLES
-        if operation in ADMIN_OPS:
-            return any(s.matches(principal, roles, None) for s in self._admin_sel)
-        writes = operation in WRITE_OPS
-        for rule in self.rules:
-            hit = rule.match(key)
-            if hit is not None:
-                sels = rule._writers if writes else rule._readers
-                if not any(s.matches(principal, roles, hit[1]) for s in sels):
-                    return False
-                break
-        else:
-            if self.default != "allow":
-                return False
-        if writes:
-            class_sel = self._class_sel
-            for cls in (current_class, target_class):
-                if cls is not None and cls in class_sel:
-                    if not any(s.matches(principal, roles, None) for s in class_sel[cls]):
-                        return False
-        return True
+        """Return the authorization verdict without allocating trace steps."""
+        return cast(bool, self._evaluate(
+            principal, operation, key, current_class=current_class,
+            target_class=target_class, record=False,
+        ))
 
     def decide(
         self,
@@ -453,34 +431,58 @@ class AccessPolicy:
         via: str = "explicit",
         all_rules: bool = True,
     ) -> AccessDecision:
-        """Decide one operation and record each step.
+        """Return the authorization result and, optionally, its decision steps."""
+        return cast(AccessDecision, self._evaluate(
+            principal, operation, key, current_class=current_class,
+            target_class=target_class, via=via, all_rules=all_rules, record=True,
+        ))
 
-        ``all_rules=False`` leaves out the rules that did not match, which is
-        what an agent's own handle shows.
+    def _evaluate(
+        self,
+        principal: str | None,
+        operation: str,
+        key: str,
+        *,
+        current_class: MemoryClass | None,
+        target_class: MemoryClass | None,
+        via: str = "explicit",
+        all_rules: bool = True,
+        record: bool,
+    ) -> bool | AccessDecision:
+        """Authoritative access algorithm shared by ``allows`` and ``decide``.
+
+        The no-recording branch deliberately avoids constructing ``TraceStep`` or
+        ``AccessDecision`` objects, while every authorization condition remains in
+        this single implementation.
         """
         if operation not in OPERATIONS:
             raise ValueError(f"Unknown operation {operation!r}; expected one of {sorted(OPERATIONS)}")
-        steps: list[TraceStep] = []
+        steps: list[TraceStep] | None = [] if record else None
         who = principal or "<anonymous>"
 
-        def done(ok: bool, stage: str, why: str, rule: str | None = None,
-                 pattern: str | None = None, owner: str | None = None) -> AccessDecision:
+        def add(stage: str, detail: str, outcome: str = "") -> None:
+            if steps is not None:
+                steps.append(TraceStep(stage, detail, outcome))
+
+        def done(ok: bool, stage: str = "", why: str = "", rule: str | None = None,
+                 pattern: str | None = None, owner: str | None = None) -> bool | AccessDecision:
+            if not record:
+                return ok
             return AccessDecision(ok, operation, key, principal, via, rule, pattern, owner,
-                                  why, stage, tuple(steps))
+                                  why, stage, tuple(steps or ()))
 
         reg = self._registry
         if principal is not None and reg and principal not in reg:
-            steps.append(TraceStep("registry", f"{principal!r} is not declared", "unknown"))
+            add("registry", f"{principal!r} is not declared", "unknown")
             return done(False, "registry", f"unknown principal {principal!r}")
         roles = reg.get(principal, _NO_ROLES) if principal is not None else _NO_ROLES
         if principal is not None and reg:
-            steps.append(TraceStep("registry", f"{principal} roles={sorted(roles)}", "declared"))
-
+            add("registry", f"{principal} roles={sorted(roles)}", "declared")
         if operation in ADMIN_OPS:
             admin_sel = self._admin_sel
             allowed_by = self._describe(admin_sel)
             ok = any(s.matches(principal, roles, None) for s in admin_sel)
-            steps.append(TraceStep("admin", f"admins {allowed_by}", "match" if ok else "no match"))
+            add("admin", f"admins {allowed_by}", "match" if ok else "no match")
             if not admin_sel:
                 return done(False, "admin", f"nobody may {operation}: {_NO_ADMINS}")
             if ok:
@@ -488,26 +490,24 @@ class AccessPolicy:
             return done(False, "admin", f"{operation} requires one of admins {allowed_by}")
 
         writes = operation in WRITE_OPS
-        acl = self._decide_rule(principal, roles, operation, key, writes, steps, all_rules)
-        allowed, stage, why, rule, pattern, owner = acl
+        allowed, stage, why, rule, pattern, owner = self._decide_rule(
+            principal, roles, operation, key, writes, steps, all_rules,
+        )
         if not allowed or not writes:
             return done(allowed, stage, why, rule, pattern, owner)
-
-        class_sel = self._class_sel
         for cls in dict.fromkeys(c for c in (current_class, target_class) if c is not None):
-            sels = class_sel.get(cls)
+            sels = self._class_sel.get(cls)
             if sels is None:
                 continue
             allowed_by = self._describe(sels)
             ok = any(s.matches(principal, roles, None) for s in sels)
-            steps.append(TraceStep("class", f"{cls.value} writers {allowed_by}", "match" if ok else "no match"))
+            add("class", f"{cls.value} writers {allowed_by}", "match" if ok else "no match")
             if not ok:
                 if not sels:
                     why = (f"{who} may not {operation} class {cls.value}: nobody may change it, "
                            f"because {_NO_ADMINS} and class_writers names nobody for it")
                 else:
                     why = f"{who} may not {operation} class {cls.value} (class_writers {allowed_by})"
-                # Name what denied, not the key rule that allowed the operation.
                 return done(False, "class", why, f"class_writers[{cls.value}]", None, owner)
         return done(allowed, stage, why, rule, pattern, owner)
 
@@ -518,7 +518,7 @@ class AccessPolicy:
         operation: str,
         key: str,
         writes: bool,
-        steps: list[TraceStep],
+        steps: list[TraceStep] | None,
         all_rules: bool,
     ) -> tuple[bool, str, str, str | None, str | None, str | None]:
         """The rule and default stages: (allowed, stage, reason, rule, pattern, owner)."""
@@ -528,15 +528,18 @@ class AccessPolicy:
             hit = rule.match(key)
             if hit is None:
                 if all_rules:
-                    steps.append(TraceStep("rule", f"{rule.name} keys={list(rule.keys)}", "no match"))
+                    if steps is not None:
+                        steps.append(TraceStep("rule", f"{rule.name} keys={list(rule.keys)}", "no match"))
                 continue
             pattern, owner = hit
             sels = rule._writers if writes else rule._readers
             raw = list(rule.writers if writes else rule.readers)
             bound = f" (owner={owner})" if owner is not None else ""
-            steps.append(TraceStep("rule", f"{rule.name} keys={list(rule.keys)}", f"match {pattern!r}{bound}"))
+            if steps is not None:
+                steps.append(TraceStep("rule", f"{rule.name} keys={list(rule.keys)}", f"match {pattern!r}{bound}"))
             ok = any(s.matches(principal, roles, owner) for s in sels)
-            steps.append(TraceStep(list_name, str(raw), "match" if ok else "no match"))
+            if steps is not None:
+                steps.append(TraceStep(list_name, str(raw), "match" if ok else "no match"))
             if ok:
                 return True, "rule", f"{who} is in {list_name} of {rule.name!r}", rule.name, pattern, owner
             why = f"{who} is not in {list_name} {raw} of {rule.name!r}"
@@ -545,7 +548,8 @@ class AccessPolicy:
             return False, "rule", why, rule.name, pattern, owner
 
         ok = self.default == "allow"
-        steps.append(TraceStep("default", f"no access rule matches {key!r}", self.default))
+        if steps is not None:
+            steps.append(TraceStep("default", f"no access rule matches {key!r}", self.default))
         why = f"no access rule covers {key!r}; default {self.default}"
         return ok, "default", why if ok else why + " (add an AccessRule for it)", None, None, None
 
