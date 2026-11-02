@@ -3,7 +3,7 @@
 layout: col-sidebar
 title: OWASP Agent Memory Guard
 tags: agent-memory-guard, ai-security, agentic-ai, memory-poisoning, asi06
-level: 2
+level: 3
 type: code
 pitch: The first open-source runtime defense against memory poisoning in AI agents — the reference implementation for OWASP ASI06.
 
@@ -77,4 +77,4 @@ Q2 2026: Release v0.3.0 — add LlamaIndex/CrewAI integrations, Redis/PostgreSQL
 
 Q3 2026: Release v0.4.0 — ML-based anomaly detection, vector store protection, real-time monitoring dashboard.
 
-Q4 2026: Release v1.0.0 stable, multi-agent security, apply for Lab promotion.
+Q4 2026: Promoted to OWASP Lab (November 2026). Release v1.0.0 stable with multi-agent security.

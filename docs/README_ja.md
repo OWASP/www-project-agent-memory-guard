@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 [![Python versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/LICENSE.md)
-[![OWASP Incubator](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
+[![OWASP Lab](https://img.shields.io/badge/OWASP-Lab-blue.svg)](https://owasp.org/www-project-agent-memory-guard/)
 
 > 🇯🇵 これは日本語版READMEです。[English version はこちら](../README.md)
 

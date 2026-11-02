@@ -1,6 +1,6 @@
 # Contributing
 
-Agent Memory Guard is an OWASP Incubator Project and welcomes contributions from the community.
+Agent Memory Guard is an OWASP Lab Project and welcomes contributions from the community.
 
 ## Getting Started
 

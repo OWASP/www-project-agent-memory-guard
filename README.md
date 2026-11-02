@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  🏆 <strong>Official OWASP Incubator Project</strong> · reference implementation for <strong>ASI06: Memory &amp; Context Poisoning</strong>
+  🏆 <strong>Official OWASP Lab Project</strong> · reference implementation for <strong>ASI06: Memory &amp; Context Poisoning</strong>
 </p>
 
 <p align="center">
@@ -42,7 +42,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 [![Python versions](https://img.shields.io/pypi/pyversions/agent-memory-guard.svg)](https://pypi.org/project/agent-memory-guard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/LICENSE.md)
-[![OWASP Incubator](https://img.shields.io/badge/OWASP-Incubator-yellow.svg)](https://owasp.org/www-project-agent-memory-guard/)
+[![OWASP Lab](https://img.shields.io/badge/OWASP-Lab-blue.svg)](https://owasp.org/www-project-agent-memory-guard/)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12908/badge)](https://www.bestpractices.dev/projects/12908)
 
 > **Created and led by [Vaishnavi Gudur](https://www.linkedin.com/in/vaishnavi-gudur)**, with co-leader **Anshul Rajkumar** — OWASP Agent Memory Guard.
@@ -93,7 +93,7 @@ Then grade your own memory stack with `amg-bench`, or start from the [secure age
 
 | Context | What happened |
 |---|---|
-| **OWASP Foundation** | Official Incubator project; reference implementation for ASI06: Memory Poisoning |
+| **OWASP Foundation** | Official Lab project (promoted from Incubator in November 2026); reference implementation for ASI06: Memory Poisoning |
 | **MITRE ATLAS** | Named in the Memory Hardening mitigation as an open-source implementation of memory-hardening controls |
 | **Public design review** | Architecture discussed with practitioners in issue threads on microsoft/autogen, langchain-ai/langgraph, BerriAI/litellm and 567-labs/instructor |
 
@@ -392,7 +392,7 @@ AMG controls map to **NIST AI RMF 1.0** and **EU AI Act** requirements. See the 
 
 - **Q2 2026** — v0.3.0: LlamaIndex/CrewAI adapters, Redis/PostgreSQL backends, Prometheus metrics.
 - **Q3 2026** — v0.4.0: ML-based anomaly detection, vector-store protection, real-time dashboard.
-- **Q4 2026** — v1.0.0: multi-agent security, OWASP Lab promotion.
+- **Q4 2026** — Promoted to OWASP Lab (November 2026). v1.0.0: multi-agent security.
 
 ## Community & adoption
 
@@ -428,7 +428,7 @@ See [AUTHORS](https://github.com/OWASP/www-project-agent-memory-guard/blob/main/
 - Referenced in the MITRE ATLAS "Memory Hardening" mitigation as an open-source implementation of memory-hardening controls.
 - Featured by Help Net Security, "OWASP Agent Memory Guard: Stop AI agents from being weaponized through their own memory" (June 2026).
 
-These mentions are descriptive, not endorsements. OWASP Incubator status is not a certification,
+These mentions are descriptive, not endorsements. OWASP Lab status is not a certification,
 and MITRE has not approved or endorsed this project; the ATLAS Memory Hardening entry lists it
 among example tools.
 
