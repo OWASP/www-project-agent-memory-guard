@@ -14,6 +14,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the published security benchmark to the current 72-case run: 94.4% recall at
+  100% precision (F1 0.971), with a 37 µs median corpus-write latency and approximately
+  140 µs 1 KB guarded-write overhead. The two benchmark configurations are now labelled
+  `Default detectors` and `Default detectors + memory_persistence_injection`; both use
+  the benchmark's custom policy.
+
 ### Fixed
 
 - Corrected the published median-latency figure from 59 µs to 62 µs in the README, the

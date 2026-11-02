@@ -3,7 +3,7 @@
 **Author:** Vaishnavi Gudur, OWASP Agent Memory Guard Project Lead  
 **Version:** 1.1  
 **Date:** August 2026  
-**Measurement basis:** AMG 0.2.2 benchmark suite (55 cases) - see §0  
+**Measurement basis:** AMG security benchmark suite (72 cases, main @ fa2df6a) - see §0
 **Applicable Standards:** NIST AI RMF 1.0 (AI 100-1), EU AI Act (Regulation 2024/1689)
 
 ---
@@ -22,16 +22,16 @@ Every quantitative claim in this document resolves to one of two artifacts. Noth
 
 | Figure | Value | Source | Scope and limits |
 |--------|-------|--------|------------------|
-| Recall (detection rate) | 92.5% | `benchmarks/results/benchmark_results.json`, produced by `benchmarks/security_benchmark.py` [7] | 55 cases: 40 attack payloads, 15 benign. Measured on AMG 0.2.2. |
+| Recall (detection rate) | 94.4% | `benchmarks/results/benchmark_results.json`, produced by `benchmarks/security_benchmark.py` [7] | 72 cases: 54 attack payloads, 18 benign. Measured with `Default detectors + memory_persistence_injection` under the benchmark's custom policy. |
 | Precision | 100% | same | No benign case was flagged. |
-| F1 | 0.961 | same | same |
+| F1 | 0.971 | same | same |
 | False positive rate | 0% | same | On this corpus only. Not a general claim. |
-| Median added latency | 62 µs | `benchmarks/results/benchmark_report.md` [7] | Per memory operation, single-process, no network memory backend. |
-| Public attack corpus | 75 examples | HuggingFace [4] | 10 each across six threat categories, plus 15 benign. Distinct from, and larger than, the 55-case benchmark suite. |
+| Median added latency | ~140 µs | `benchmarks/results/benchmark_report.md` [7] | 1 KB guarded write overhead in the overhead benchmark, single-process, no network memory backend. Median corpus-write latency is 37 µs. |
+| Public attack corpus | 75 examples | HuggingFace [4] | 10 each across six threat categories, plus 15 benign. Distinct from, and larger than, the 72-case benchmark suite. |
 
-**What these numbers do not establish.** The corpus is representative, not exhaustive, and was authored by the project. A 92.5% recall figure on 55 authored cases is evidence that the detectors work on known attack shapes; it is not a measure of performance against an adaptive adversary or against payload families the corpus does not contain. Organizations citing these figures in regulatory documentation should cite them with the corpus size attached, and should run the benchmark against their own attack corpus before relying on the number in an accuracy declaration.
+**What these numbers do not establish.** The corpus is representative, not exhaustive, and was authored by the project. A 94.4% recall figure on 72 authored cases is evidence that the detectors work on known attack shapes; it is not a measure of performance against an adaptive adversary or against payload families the corpus does not contain. Organizations citing these figures in regulatory documentation should cite them with the corpus size attached, and should run the benchmark against their own attack corpus before relying on the number in an accuracy declaration.
 
-**Reproducing them.** `python benchmarks/security_benchmark.py` regenerates every figure in this table from source. Re-run it against the version you deploy; these values are pinned to 0.2.2 and will move.
+**Reproducing them.** `python benchmarks/security_benchmark.py` regenerates every figure in this table from source. Re-run it against the version you deploy; these values are pinned to the recorded benchmark run and will move.
 
 ---
 
@@ -61,7 +61,7 @@ The Map function establishes context and identifies risks. AMG contributes by ch
 | Map 1.1 | Intended purposes, context-specific risks, and deployment settings are documented. | AMG's threat taxonomy (injection, exfiltration, privilege escalation, persistence, tool abuse, cross-task contamination) provides a structured vocabulary for documenting memory-specific risks in deployment contexts. |
 | Map 1.6 | System requirements address socio-technical implications. | AMG enables the requirement "the system shall validate all memory writes for poisoning patterns" — a concrete, testable security requirement for agent architectures. |
 | Map 2.2 | AI system knowledge limits and human oversight are documented. | AMG's detection confidence scores communicate the system's knowledge limits — what it can and cannot detect — enabling informed human oversight decisions. |
-| Map 2.3 | Scientific integrity and TEVV considerations are documented. | AMG publishes a labeled attack corpus (75 examples across six threat categories plus benign controls, on HuggingFace [4]) and a reproducible 55-case benchmark suite in-repo [7]. Measured recall is 92.5% at 100% precision (F1 0.961). See §0 for the basis of every figure in this document. |
+| Map 2.3 | Scientific integrity and TEVV considerations are documented. | AMG publishes a labeled attack corpus (75 examples across six threat categories plus benign controls, on HuggingFace [4]) and a reproducible 72-case benchmark suite in-repo [7]. Measured recall is 94.4% at 100% precision (F1 0.971). See §0 for the basis of every figure in this document. |
 | Map 4.1 | Approaches for mapping legal risks of third-party components are documented. | AMG identifies when third-party data (tool outputs, RAG retrievals) contains poisoning patterns before they enter the persistent memory, mapping a specific vector of third-party risk. |
 | Map 4.2 | Internal risk controls for AI system components are identified. | AMG itself serves as a documented internal risk control for the memory subsystem of AI agents. |
 | Map 5.1 | Likelihood and magnitude of impacts are identified. | AMG's detection statistics (threat types, frequency, confidence) provide empirical data for assessing likelihood and magnitude of memory poisoning impacts. |
@@ -72,7 +72,7 @@ The Measure function applies metrics and methodologies to assess AI risks. AMG p
 
 | Subcategory | Requirement | AMG Contribution |
 |-------------|-------------|------------------|
-| Measure 1.1 | Metrics for AI risks identified in Map are selected and implemented. | AMG provides concrete metrics: recall (92.5%), precision (100%), false positive rate (0% on the benchmark corpus), median scan latency (62 µs), threat type distribution, and temporal trends — all applicable to memory poisoning risk measurement. |
+| Measure 1.1 | Metrics for AI risks identified in Map are selected and implemented. | AMG provides concrete metrics: recall (94.4%), precision (100%), false positive rate (0% on the benchmark corpus), median corpus-write latency (37 µs), 1 KB guarded write overhead (~140 µs), threat type distribution, and temporal trends — all applicable to memory poisoning risk measurement. |
 | Measure 2.4 | AI system functionality is monitored in production. | AMG's runtime scanning provides continuous production monitoring of memory operations, detecting drift or novel attack patterns as they emerge. |
 | Measure 2.5 | The AI system is demonstrated to be valid and reliable. | AMG's benchmark suite with labeled attack corpus enables validation of detection reliability. The OpenSSF Best Practices badge (passing level) [5] documents software quality practices; the project's OpenSSF Scorecard [8] gives the current supply-chain posture. |
 | Measure 2.6 | The AI system is evaluated for safety risks and demonstrated to be safe. | AMG directly evaluates safety by detecting patterns that could cause the agent to behave unsafely (e.g., ignoring safety instructions, leaking sensitive data). Scan latency metrics demonstrate real-time monitoring capability. |
@@ -108,7 +108,7 @@ Article 9 requires providers of high-risk AI systems to establish, implement, do
 | Requirement | Article 9 Text (Summary) | AMG Contribution |
 |-------------|--------------------------|------------------|
 | Art. 9(2)(a) | Identification and analysis of known and reasonably foreseeable risks. | AMG's threat taxonomy identifies and categorizes the known risks of memory poisoning: injection, exfiltration, privilege escalation, persistence loops, tool abuse, and cross-task contamination. |
-| Art. 9(2)(b) | Estimation and evaluation of risks when the system is used in accordance with its intended purpose and under conditions of reasonably foreseeable misuse. | AMG's benchmark suite provides empirical risk estimation. Measured recall of 92.5% under the tested conditions quantifies residual risk: on this corpus roughly 1 in 13 attack payloads was not detected. Residual risk outside the corpus is not quantified. |
+| Art. 9(2)(b) | Estimation and evaluation of risks when the system is used in accordance with its intended purpose and under conditions of reasonably foreseeable misuse. | AMG's benchmark suite provides empirical risk estimation. Measured recall of 94.4% under the tested conditions quantifies residual risk: on this corpus roughly 1 in 18 attack payloads was not detected. Residual risk outside the corpus is not quantified. |
 | Art. 9(2)(c) | Evaluation of other risks based on post-market monitoring data. | AMG's production monitoring generates post-market data on emerging attack patterns, enabling continuous risk evaluation as the threat landscape evolves. |
 | Art. 9(2)(d) | Adoption of appropriate and targeted risk management measures. | AMG is itself a targeted risk management measure — it specifically addresses memory poisoning without impacting legitimate agent functionality. |
 | Art. 9(4) | Risk management measures shall give due consideration to the effects and possible interactions from combined application of requirements. | AMG's design considers interaction effects: it validates memory content without disrupting the agent's core functionality, maintaining both security and utility. |
@@ -141,7 +141,7 @@ Article 15 requires high-risk AI systems to achieve appropriate levels of accura
 | Requirement | Summary | AMG Contribution |
 |-------------|---------|------------------|
 | Art. 13(1) | High-risk AI systems shall be designed to ensure their operation is sufficiently transparent to enable deployers to interpret the system's output. | AMG's detection explanations (threat type, confidence, matched patterns) provide transparency about why a memory operation was blocked or flagged. |
-| Art. 13(3)(b)(ii) | Instructions of use include the level of accuracy, robustness, and cybersecurity against which the system has been tested and validated. | AMG's published benchmark results (92.5% recall, 100% precision, per-category breakdown) provide accuracy and cybersecurity validation data. Deployers must note the corpus size (55 cases) when citing these figures under Art. 13(3)(b)(ii). |
+| Art. 13(3)(b)(ii) | Instructions of use include the level of accuracy, robustness, and cybersecurity against which the system has been tested and validated. | AMG's published benchmark results (94.4% recall, 100% precision, per-category breakdown) provide accuracy and cybersecurity validation data. Deployers must note the corpus size (72 cases) when citing these figures under Art. 13(3)(b)(ii). |
 
 ---
 

@@ -54,6 +54,25 @@ def test_benchmark_result_metrics(benchmark_module):
     assert cm == {"tp": 40, "fp": 5, "tn": 45, "fn": 10}
 
 
+def test_performance_policies_use_real_detectors(benchmark_module):
+    """The 10-rule performance policy references real detectors and every rule can apply."""
+    from agent_memory_guard.events import Action, Severity
+
+    policies = benchmark_module["_performance_policies"]()
+    ten_rule = policies["10-rule"]
+    guard = benchmark_module["MemoryGuard"](policy=ten_rule)
+    detector_names = {d.name for d in guard._detectors}  # noqa: SLF001
+
+    assert len(ten_rule.rules) == 10
+    for rule in ten_rule.rules:
+        assert rule.on in detector_names
+        key = rule.keys[0].replace("*", "sample") if rule.keys else "perf.key.1kb"
+        assert rule.applies_to(rule.on, Severity.LOW, key)
+
+    assert policies["1-rule"].decide("prompt_injection", Severity.LOW, "session.notes") == Action.BLOCK
+    assert ten_rule.decide("prompt_injection", Severity.LOW, "session.notes") == Action.BLOCK
+
+
 def test_performance_benchmark_execution(benchmark_module):
     """Performance measurements cover bare store baseline, read, write, snapshot, rollback."""
     run_perf = benchmark_module["run_performance_benchmark"]

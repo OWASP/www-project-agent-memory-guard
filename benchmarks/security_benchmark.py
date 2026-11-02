@@ -326,7 +326,12 @@ class BenchmarkResult:
 
 
 def _default_suite_detectors() -> list[Any]:
-    """Detectors included in out-of-the-box plain MemoryGuard()."""
+    """Detectors in the ``Default detectors`` benchmark configuration.
+
+    Both benchmark configurations use the benchmark's custom policy, including
+    protected keys, immutable ``identity.user_id``, and block/quarantine rules;
+    this configuration differs only by omitting opt-in detectors.
+    """
     return [
         PromptInjectionDetector(),
         SensitiveDataDetector(),
@@ -336,7 +341,11 @@ def _default_suite_detectors() -> list[Any]:
 
 
 def _benchmark_detectors() -> list[Any]:
-    """Default suite plus opt-in detectors (e.g. MemoryPersistenceInjectionDetector)."""
+    """``Default detectors + memory_persistence_injection`` configuration.
+
+    Adds the opt-in :class:`MemoryPersistenceInjectionDetector` to the default
+    detector suite while using the same benchmark custom policy.
+    """
     return [*_default_suite_detectors(), MemoryPersistenceInjectionDetector()]
 
 
@@ -483,18 +492,60 @@ def get_redis_backend() -> tuple[Any | None, str]:
     return None, "Redis backend unavailable (no reachable Redis server and fakeredis not installed)"
 
 
-def run_performance_benchmark(iterations: int = 25) -> PerformanceBenchmarkResult:
-    """Measure read, write, snapshot, and rollback overhead across stores, policies, and value sizes."""
-    policies = {
+def _performance_policies() -> dict[str, Policy]:
+    """Policies used to measure rule-evaluation overhead.
+
+    The ``10-rule`` policy uses real detector names supported by the default
+    guard suite, with key-scoped rules modelled on :meth:`Policy.tiered`.
+    """
+    return {
         "1-rule": Policy(
             default_action=Action.ALLOW,
             rules=[PolicyRule("block_injection", "prompt_injection", Action.BLOCK)],
         ),
         "10-rule": Policy(
             default_action=Action.ALLOW,
-            rules=[PolicyRule(f"rule_{i}", f"pattern_{i}", Action.BLOCK) for i in range(10)],
+            protected_keys=("identity.*", "system.*", "agent.goal", "security.*"),
+            immutable_keys=("identity.user_id",),
+            rules=[
+                PolicyRule("block_injection", "prompt_injection", Action.BLOCK),
+                PolicyRule("redact_secrets", "sensitive_data", Action.REDACT),
+                PolicyRule("block_protected_key", "protected_key", Action.BLOCK),
+                PolicyRule("quarantine_rapid_change", "rapid_change", Action.QUARANTINE),
+                PolicyRule("quarantine_cross_task", "cross_task_contamination", Action.QUARANTINE),
+                PolicyRule("quarantine_self_reinforcement", "self_reinforcement", Action.QUARANTINE),
+                PolicyRule(
+                    "block_credentials_injection",
+                    "prompt_injection",
+                    Action.BLOCK,
+                    keys=("credentials.*",),
+                ),
+                PolicyRule(
+                    "redact_credentials_secrets",
+                    "sensitive_data",
+                    Action.REDACT,
+                    keys=("credentials.*",),
+                ),
+                PolicyRule(
+                    "quarantine_facts_injection",
+                    "prompt_injection",
+                    Action.QUARANTINE,
+                    keys=("facts.*",),
+                ),
+                PolicyRule(
+                    "quarantine_scratch_anomaly",
+                    "size_anomaly",
+                    Action.QUARANTINE,
+                    keys=("scratch.*",),
+                ),
+            ],
         ),
     }
+
+
+def run_performance_benchmark(iterations: int = 25) -> PerformanceBenchmarkResult:
+    """Measure read, write, snapshot, and rollback overhead across stores, policies, and value sizes."""
+    policies = _performance_policies()
 
     size_map = {
         "100b": "x" * 100,
@@ -838,7 +889,7 @@ def generate_report(
 
 ## Executive Summary
 
-With this benchmark policy and opt-in detector configuration, Agent Memory Guard detected **{result.recall:.1%}** of attack cases with **{result.precision:.1%} precision** across {result.total} labeled test cases; median write latency was **{med_lat:.0f} µs** in this local run.
+With the `Default detectors + memory_persistence_injection` configuration under the benchmark's custom policy, Agent Memory Guard detected **{result.recall:.1%}** of attack cases with **{result.precision:.1%} precision** across {result.total} labeled test cases; median corpus-write latency was **{med_lat:.0f} µs** in this local run.
 
 | Metric | Value |
 |--------|-------|
@@ -893,26 +944,28 @@ With this benchmark policy and opt-in detector configuration, Agent Memory Guard
         opt_in = [n for n in result.detector_names if n not in default_result.detector_names]
         report += "\n---\n\n## Configuration Coverage\n\n"
         report += (
-            "The headline figures above are measured with the opt-in `memory_persistence_injection` detector enabled "
-            "under a custom `Policy` (`default_action=ALLOW`). A plain `MemoryGuard()` with default configuration does "
-            "not load the opt-in detector, so the same corpus scores differently out of the box. Both runs use the "
-            "identical corpus (54 attacks, 18 benign controls) and custom policy; only the detector set differs.\n\n"
+            "Both configurations use the benchmark's custom `Policy` (`default_action=ALLOW`), including "
+            "protected keys (`identity.*`, `system.*`, `agent.goal`, `agent.capabilities`, `security.*`), "
+            "immutable `identity.user_id`, and block/quarantine rules. `Default detectors` loads the default "
+            "detector suite; `Default detectors + memory_persistence_injection` adds the opt-in "
+            "`memory_persistence_injection` detector. Both run the identical 72-case corpus (54 attacks, "
+            "18 benign controls); only the detector set differs.\n\n"
         )
         report += "| Configuration | Detectors | Recall | Precision | FP rate | Missed |\n"
         report += "|---------------|-----------|--------|-----------|---------|--------|\n"
         report += (
-            f"| Default suite (out of the box) | {len(default_result.detector_names)} | "
+            f"| Default detectors | {len(default_result.detector_names)} | "
             f"{default_result.recall:.1%} | {default_result.precision:.1%} | "
             f"{default_result.false_positive_rate:.1%} | {default_result.false_negatives} |\n"
         )
         report += (
-            f"| Benchmarked configuration | {len(result.detector_names)} | "
+            f"| Default detectors + memory_persistence_injection | {len(result.detector_names)} | "
             f"{result.recall:.1%} | {result.precision:.1%} | "
             f"{result.false_positive_rate:.1%} | {result.false_negatives} |\n"
         )
-        report += f"\n**Opt-in detectors enabled in custom configuration**: {', '.join(f'`{n}`' for n in opt_in) or 'none'}\n\n"
-        report += "Per-category detection, default suite vs benchmarked configuration:\n\n"
-        report += "| Category | Default suite | Benchmarked |\n|----------|---------------|-------------|\n"
+        report += f"\n**Opt-in detector added in the second configuration**: {', '.join(f'`{n}`' for n in opt_in) or 'none'}\n\n"
+        report += "Per-category detection, `Default detectors` vs `Default detectors + memory_persistence_injection`:\n\n"
+        report += "| Category | Default detectors | Default detectors + memory_persistence_injection |\n|----------|-------------------|--------------------------------------------------|\n"
         for cat in result.category_results:
             if cat == "benign":
                 continue
@@ -945,7 +998,9 @@ This local, synthetic measurement is not a general latency guarantee for product
         report += "\n### MemoryGuard Overhead Baseline (Guarded vs Bare InMemoryStore)\n\n"
         report += (
             "Overhead is calculated as guarded latency minus unguarded bare InMemoryStore latency "
-            "across payload sizes. Measurements are local and synthetic.\n\n"
+            "across payload sizes. Measurements are local and synthetic. The performance payloads are "
+            "`\"x\" * n` and are not crafted to match the content detectors; the `1-rule` and `10-rule` "
+            "policies therefore differ in rule-evaluation cost, not in detection outcome.\n\n"
         )
         report += "| Policy | Payload Size | Operation | Unguarded Bare Store (µs) | Guarded MemoryGuard (µs) | Guard Overhead (µs) |\n"
         report += "|--------|--------------|-----------|---------------------------|--------------------------|---------------------|\n"
@@ -1009,12 +1064,13 @@ This local, synthetic measurement is not a general latency guarantee for product
 
 ## Methodology
 
-- **Guard Configuration**: custom `Policy` (`default_action=ALLOW`) with rules covering injection, secrets redaction, protected keys, size anomalies, churn, and memory persistence
+- **Guard Configuration**: the benchmark's custom `Policy` (`default_action=ALLOW`), including protected keys (`identity.*`, `system.*`, `agent.goal`, `agent.capabilities`, `security.*`), immutable `identity.user_id`, and block/quarantine rules. Both benchmark configurations use this policy.
 - **Attack Corpus**: exactly 54 attack payloads across injection, leakage, tampering, and churn, alongside 18 benign controls (72 test cases total)
 - **Categories Tested**: Injection (20), Leakage (14), Tampering (12), Churn (8), Benign (18)
 - **Configurations Tested**:
-  - **Default Configuration (7 detectors)**: `PromptInjectionDetector`, `SensitiveDataDetector`, `SizeAnomalyDetector`, `RapidChangeDetector`, `ProtectedKeyDetector`, `CrossTaskContaminationDetector`, `SelfReinforcementDetector`
-  - **Custom Benchmark Configuration (8 detectors)**: Default suite plus opt-in `MemoryPersistenceInjectionDetector` (`memory_persistence_injection`)
+  - **Default detectors (7 detectors)**: `PromptInjectionDetector`, `SensitiveDataDetector`, `SizeAnomalyDetector`, `RapidChangeDetector`, `ProtectedKeyDetector`, `CrossTaskContaminationDetector`, `SelfReinforcementDetector`
+  - **Default detectors + memory_persistence_injection (8 detectors)**: the default suite plus opt-in `MemoryPersistenceInjectionDetector` (`memory_persistence_injection`)
+- **Performance Policies**: `1-rule` contains one `prompt_injection` rule; `10-rule` contains ten rules over the default detector names, including key-scoped rules. Performance payloads are `"x" * n` and do not target content-detector patterns.
 - **Measurement**: Each test case runs on a fresh `MemoryGuard` instance to avoid state leakage
 - **Latency**: Measured via `time.perf_counter_ns()` (wall-clock, includes all detector processing)
 - **Overhead Baseline**: Measured against unguarded bare `InMemoryStore` operations per payload size (overhead = guarded latency − unguarded latency)
@@ -1080,11 +1136,11 @@ if __name__ == "__main__":
         print(f"    {cat:<20s} {rate:5.0f}% ({tp}/{total})")
     print()
 
-    print("  Configuration coverage (same corpus, same policy):")
-    print(f"    default suite      ({len(default_result.detector_names)} detectors): "
+    print("  Configuration coverage (same corpus, same benchmark policy):")
+    print(f"    Default detectors ({len(default_result.detector_names)} detectors): "
           f"recall {default_result.recall:.1%}, FP rate {default_result.false_positive_rate:.1%}, "
           f"FN rate {default_result.false_negative_rate:.1%}")
-    print(f"    benchmarked config ({len(result.detector_names)} detectors): "
+    print(f"    Default detectors + memory_persistence_injection ({len(result.detector_names)} detectors): "
           f"recall {result.recall:.1%}, FP rate {result.false_positive_rate:.1%}, "
           f"FN rate {result.false_negative_rate:.1%}")
     print()

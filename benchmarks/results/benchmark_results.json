@@ -1,6 +1,6 @@
 {
   "version": "main @ fa2df6a",
-  "date": "2026-10-27",
+  "date": "2026-11-02",
   "total_cases": 72,
   "accuracy": 0.9583,
   "precision": 1.0,
@@ -53,43 +53,43 @@
       "100b": {
         "read": {
           "median_us": 0.12,
-          "mean_us": 0.16,
-          "p95_us": 0.47,
-          "ops_per_sec": 6062075.7
+          "mean_us": 0.2,
+          "p95_us": 0.67,
+          "ops_per_sec": 5085435.3
         },
         "write": {
           "median_us": 0.12,
-          "mean_us": 0.12,
+          "mean_us": 0.13,
           "p95_us": 0.2,
-          "ops_per_sec": 8570449.1
+          "ops_per_sec": 7790589.0
         }
       },
       "1kb": {
         "read": {
           "median_us": 0.12,
           "mean_us": 0.12,
-          "p95_us": 0.16,
-          "ops_per_sec": 8212877.8
+          "p95_us": 0.19,
+          "ops_per_sec": 8327781.5
         },
         "write": {
           "median_us": 0.08,
-          "mean_us": 0.1,
-          "p95_us": 0.16,
-          "ops_per_sec": 10000000.0
+          "mean_us": 0.11,
+          "p95_us": 0.19,
+          "ops_per_sec": 9231905.5
         }
       },
       "10kb": {
         "read": {
           "median_us": 0.08,
-          "mean_us": 0.1,
+          "mean_us": 0.11,
           "p95_us": 0.12,
-          "ops_per_sec": 9996001.6
+          "ops_per_sec": 9370314.8
         },
         "write": {
           "median_us": 0.08,
           "mean_us": 0.09,
           "p95_us": 0.12,
-          "ops_per_sec": 11101243.3
+          "ops_per_sec": 10715816.5
         }
       },
       "100kb": {
@@ -97,13 +97,13 @@
           "median_us": 0.08,
           "mean_us": 0.1,
           "p95_us": 0.12,
-          "ops_per_sec": 9992006.4
+          "ops_per_sec": 9838646.2
         },
         "write": {
           "median_us": 0.08,
-          "mean_us": 0.08,
+          "mean_us": 0.1,
           "p95_us": 0.12,
-          "ops_per_sec": 11996161.2
+          "ops_per_sec": 10526315.8
         }
       }
     },
@@ -112,106 +112,106 @@
         "1-rule": {
           "100b": {
             "read": {
-              "median_us": 18.75,
-              "mean_us": 19.29,
-              "p95_us": 22.93,
-              "ops_per_sec": 51849.4
+              "median_us": 17.21,
+              "mean_us": 18.28,
+              "p95_us": 22.17,
+              "ops_per_sec": 54694.9
             },
             "write": {
-              "median_us": 18.96,
-              "mean_us": 21.33,
-              "p95_us": 28.13,
-              "ops_per_sec": 46878.5
+              "median_us": 18.38,
+              "mean_us": 20.61,
+              "p95_us": 27.43,
+              "ops_per_sec": 48528.0
             },
             "snapshot": {
-              "median_us": 9.85,
-              "mean_us": 11.21,
-              "p95_us": 17.11,
-              "ops_per_sec": 89192.8
+              "median_us": 9.31,
+              "mean_us": 10.73,
+              "p95_us": 16.92,
+              "ops_per_sec": 93205.3
             },
             "rollback": {
-              "median_us": 6.21,
-              "mean_us": 7.65,
-              "p95_us": 13.7,
-              "ops_per_sec": 130731.8
+              "median_us": 5.73,
+              "mean_us": 6.99,
+              "p95_us": 11.99,
+              "ops_per_sec": 143143.4
             }
           },
           "1kb": {
             "read": {
-              "median_us": 150.25,
-              "mean_us": 150.92,
-              "p95_us": 156.19,
-              "ops_per_sec": 6626.0
+              "median_us": 137.5,
+              "mean_us": 139.06,
+              "p95_us": 143.39,
+              "ops_per_sec": 7191.4
             },
             "write": {
-              "median_us": 150.71,
-              "mean_us": 152.08,
-              "p95_us": 160.22,
-              "ops_per_sec": 6575.3
+              "median_us": 144.62,
+              "mean_us": 146.87,
+              "p95_us": 161.62,
+              "ops_per_sec": 6808.7
             },
             "snapshot": {
-              "median_us": 12.35,
-              "mean_us": 13.55,
-              "p95_us": 18.72,
-              "ops_per_sec": 73788.5
+              "median_us": 11.83,
+              "mean_us": 14.07,
+              "p95_us": 24.09,
+              "ops_per_sec": 71075.7
             },
             "rollback": {
-              "median_us": 6.08,
-              "mean_us": 6.57,
-              "p95_us": 8.65,
-              "ops_per_sec": 152299.7
+              "median_us": 5.79,
+              "mean_us": 6.86,
+              "p95_us": 12.02,
+              "ops_per_sec": 145673.5
             }
           },
           "10kb": {
             "read": {
-              "median_us": 1537.46,
-              "mean_us": 1626.81,
-              "p95_us": 2132.15,
-              "ops_per_sec": 614.7
+              "median_us": 1366.12,
+              "mean_us": 1371.17,
+              "p95_us": 1413.64,
+              "ops_per_sec": 729.3
             },
             "write": {
-              "median_us": 1419.79,
-              "mean_us": 1452.75,
-              "p95_us": 1637.11,
-              "ops_per_sec": 688.3
+              "median_us": 1364.58,
+              "mean_us": 1379.06,
+              "p95_us": 1451.79,
+              "ops_per_sec": 725.1
             },
             "snapshot": {
-              "median_us": 36.58,
-              "mean_us": 41.93,
-              "p95_us": 66.42,
-              "ops_per_sec": 23850.9
+              "median_us": 35.83,
+              "mean_us": 40.78,
+              "p95_us": 63.25,
+              "ops_per_sec": 24523.1
             },
             "rollback": {
-              "median_us": 6.17,
-              "mean_us": 6.76,
-              "p95_us": 9.86,
-              "ops_per_sec": 147996.5
+              "median_us": 5.77,
+              "mean_us": 6.11,
+              "p95_us": 7.81,
+              "ops_per_sec": 163637.1
             }
           },
           "100kb": {
             "read": {
-              "median_us": 13998.62,
-              "mean_us": 14099.34,
-              "p95_us": 14810.85,
-              "ops_per_sec": 70.9
+              "median_us": 13803.92,
+              "mean_us": 14631.08,
+              "p95_us": 16813.91,
+              "ops_per_sec": 68.3
             },
             "write": {
-              "median_us": 13811.71,
-              "mean_us": 13870.25,
-              "p95_us": 14224.67,
-              "ops_per_sec": 72.1
+              "median_us": 13813.33,
+              "mean_us": 13804.36,
+              "p95_us": 14001.54,
+              "ops_per_sec": 72.4
             },
             "snapshot": {
-              "median_us": 275.4,
-              "mean_us": 277.47,
-              "p95_us": 296.1,
-              "ops_per_sec": 3604.0
+              "median_us": 272.46,
+              "mean_us": 277.25,
+              "p95_us": 304.31,
+              "ops_per_sec": 3606.9
             },
             "rollback": {
-              "median_us": 5.75,
-              "mean_us": 6.27,
-              "p95_us": 8.65,
-              "ops_per_sec": 159553.3
+              "median_us": 5.9,
+              "mean_us": 6.6,
+              "p95_us": 9.12,
+              "ops_per_sec": 151499.8
             }
           }
         },
@@ -219,105 +219,105 @@
           "100b": {
             "read": {
               "median_us": 17.25,
-              "mean_us": 17.59,
-              "p95_us": 18.29,
-              "ops_per_sec": 56855.7
+              "mean_us": 18.37,
+              "p95_us": 23.92,
+              "ops_per_sec": 54426.7
             },
             "write": {
-              "median_us": 18.08,
-              "mean_us": 20.2,
-              "p95_us": 26.22,
-              "ops_per_sec": 49496.7
+              "median_us": 19.38,
+              "mean_us": 21.33,
+              "p95_us": 29.16,
+              "ops_per_sec": 46882.4
             },
             "snapshot": {
-              "median_us": 9.21,
-              "mean_us": 9.84,
-              "p95_us": 12.57,
-              "ops_per_sec": 101661.3
+              "median_us": 9.58,
+              "mean_us": 10.07,
+              "p95_us": 12.64,
+              "ops_per_sec": 99310.6
             },
             "rollback": {
-              "median_us": 5.9,
-              "mean_us": 6.06,
-              "p95_us": 6.94,
-              "ops_per_sec": 165136.9
+              "median_us": 5.79,
+              "mean_us": 6.89,
+              "p95_us": 11.95,
+              "ops_per_sec": 145234.5
             }
           },
           "1kb": {
             "read": {
-              "median_us": 139.92,
-              "mean_us": 140.68,
-              "p95_us": 145.7,
-              "ops_per_sec": 7108.2
+              "median_us": 142.42,
+              "mean_us": 143.11,
+              "p95_us": 148.35,
+              "ops_per_sec": 6987.6
             },
             "write": {
-              "median_us": 141.33,
-              "mean_us": 144.74,
-              "p95_us": 155.42,
-              "ops_per_sec": 6908.8
+              "median_us": 144.0,
+              "mean_us": 155.74,
+              "p95_us": 170.6,
+              "ops_per_sec": 6421.2
             },
             "snapshot": {
-              "median_us": 11.79,
-              "mean_us": 13.66,
-              "p95_us": 22.2,
-              "ops_per_sec": 73226.1
+              "median_us": 12.15,
+              "mean_us": 15.72,
+              "p95_us": 32.17,
+              "ops_per_sec": 63618.0
             },
             "rollback": {
-              "median_us": 5.81,
-              "mean_us": 6.22,
-              "p95_us": 7.8,
-              "ops_per_sec": 160804.0
+              "median_us": 5.85,
+              "mean_us": 6.49,
+              "p95_us": 9.67,
+              "ops_per_sec": 154012.0
             }
           },
           "10kb": {
             "read": {
-              "median_us": 1367.79,
-              "mean_us": 1375.11,
-              "p95_us": 1406.34,
-              "ops_per_sec": 727.2
+              "median_us": 1367.54,
+              "mean_us": 1390.83,
+              "p95_us": 1501.91,
+              "ops_per_sec": 719.0
             },
             "write": {
-              "median_us": 1383.75,
-              "mean_us": 1420.9,
-              "p95_us": 1476.87,
-              "ops_per_sec": 703.8
+              "median_us": 1354.5,
+              "mean_us": 1379.26,
+              "p95_us": 1545.28,
+              "ops_per_sec": 725.0
             },
             "snapshot": {
-              "median_us": 36.62,
-              "mean_us": 40.41,
-              "p95_us": 58.17,
-              "ops_per_sec": 24748.6
+              "median_us": 35.63,
+              "mean_us": 39.25,
+              "p95_us": 56.14,
+              "ops_per_sec": 25480.0
             },
             "rollback": {
-              "median_us": 5.88,
-              "mean_us": 6.36,
-              "p95_us": 8.57,
-              "ops_per_sec": 157203.9
+              "median_us": 5.77,
+              "mean_us": 6.26,
+              "p95_us": 8.68,
+              "ops_per_sec": 159825.3
             }
           },
           "100kb": {
             "read": {
-              "median_us": 13808.75,
-              "mean_us": 13856.57,
-              "p95_us": 14225.64,
-              "ops_per_sec": 72.2
+              "median_us": 13788.62,
+              "mean_us": 13805.54,
+              "p95_us": 13963.34,
+              "ops_per_sec": 72.4
             },
             "write": {
-              "median_us": 13939.46,
-              "mean_us": 14408.99,
-              "p95_us": 17518.19,
-              "ops_per_sec": 69.4
+              "median_us": 13861.25,
+              "mean_us": 13823.3,
+              "p95_us": 14131.91,
+              "ops_per_sec": 72.3
             },
             "snapshot": {
-              "median_us": 277.67,
-              "mean_us": 279.03,
-              "p95_us": 294.94,
-              "ops_per_sec": 3583.8
+              "median_us": 280.04,
+              "mean_us": 289.86,
+              "p95_us": 332.57,
+              "ops_per_sec": 3449.9
             },
             "rollback": {
-              "median_us": 5.88,
-              "mean_us": 6.42,
-              "p95_us": 8.91,
-              "ops_per_sec": 155678.4
+              "median_us": 6.27,
+              "mean_us": 7.32,
+              "p95_us": 11.94,
+              "ops_per_sec": 136619.8
             }
           }
         }
@@ -326,212 +326,212 @@
         "1-rule": {
           "100b": {
             "read": {
-              "median_us": 96.33,
-              "mean_us": 97.97,
-              "p95_us": 103.62,
-              "ops_per_sec": 10206.7
+              "median_us": 97.17,
+              "mean_us": 99.1,
+              "p95_us": 110.98,
+              "ops_per_sec": 10090.6
             },
             "write": {
-              "median_us": 48.67,
-              "mean_us": 52.25,
-              "p95_us": 64.67,
-              "ops_per_sec": 19137.0
+              "median_us": 52.25,
+              "mean_us": 54.98,
+              "p95_us": 74.67,
+              "ops_per_sec": 18188.4
             },
             "snapshot": {
-              "median_us": 97.02,
-              "mean_us": 99.84,
-              "p95_us": 114.72,
-              "ops_per_sec": 10015.6
+              "median_us": 95.44,
+              "mean_us": 99.9,
+              "p95_us": 124.69,
+              "ops_per_sec": 10009.7
             },
             "rollback": {
-              "median_us": 111.06,
-              "mean_us": 111.92,
-              "p95_us": 117.76,
-              "ops_per_sec": 8934.9
+              "median_us": 110.48,
+              "mean_us": 112.75,
+              "p95_us": 126.86,
+              "ops_per_sec": 8869.2
             }
           },
           "1kb": {
             "read": {
-              "median_us": 220.17,
-              "mean_us": 224.14,
-              "p95_us": 239.32,
-              "ops_per_sec": 4461.4
+              "median_us": 218.96,
+              "mean_us": 229.25,
+              "p95_us": 280.88,
+              "ops_per_sec": 4362.1
             },
             "write": {
-              "median_us": 175.38,
-              "mean_us": 181.51,
-              "p95_us": 194.34,
-              "ops_per_sec": 5509.4
+              "median_us": 173.46,
+              "mean_us": 176.79,
+              "p95_us": 190.22,
+              "ops_per_sec": 5656.6
             },
             "snapshot": {
-              "median_us": 96.83,
-              "mean_us": 97.74,
-              "p95_us": 107.65,
-              "ops_per_sec": 10230.9
+              "median_us": 97.54,
+              "mean_us": 101.24,
+              "p95_us": 122.29,
+              "ops_per_sec": 9877.6
             },
             "rollback": {
-              "median_us": 114.58,
-              "mean_us": 114.9,
-              "p95_us": 120.28,
-              "ops_per_sec": 8703.5
+              "median_us": 117.73,
+              "mean_us": 118.55,
+              "p95_us": 124.87,
+              "ops_per_sec": 8435.6
             }
           },
           "10kb": {
             "read": {
-              "median_us": 1488.33,
-              "mean_us": 2639.04,
-              "p95_us": 4120.43,
-              "ops_per_sec": 378.9
+              "median_us": 1467.83,
+              "mean_us": 1490.24,
+              "p95_us": 1576.62,
+              "ops_per_sec": 671.0
             },
             "write": {
-              "median_us": 1506.08,
-              "mean_us": 1517.65,
-              "p95_us": 1656.12,
-              "ops_per_sec": 658.9
+              "median_us": 1431.71,
+              "mean_us": 1445.23,
+              "p95_us": 1545.51,
+              "ops_per_sec": 691.9
             },
             "snapshot": {
-              "median_us": 139.23,
-              "mean_us": 149.84,
-              "p95_us": 193.25,
-              "ops_per_sec": 6673.9
+              "median_us": 133.29,
+              "mean_us": 140.53,
+              "p95_us": 178.88,
+              "ops_per_sec": 7115.8
             },
             "rollback": {
-              "median_us": 144.62,
-              "mean_us": 146.97,
-              "p95_us": 161.3,
-              "ops_per_sec": 6804.0
+              "median_us": 131.0,
+              "mean_us": 136.25,
+              "p95_us": 157.01,
+              "ops_per_sec": 7339.3
             }
           },
           "100kb": {
             "read": {
-              "median_us": 14110.17,
-              "mean_us": 14262.98,
-              "p95_us": 14788.65,
-              "ops_per_sec": 70.1
+              "median_us": 14171.33,
+              "mean_us": 15040.93,
+              "p95_us": 14489.9,
+              "ops_per_sec": 66.5
             },
             "write": {
-              "median_us": 14016.12,
-              "mean_us": 14180.26,
-              "p95_us": 14745.75,
-              "ops_per_sec": 70.5
+              "median_us": 14155.54,
+              "mean_us": 14139.16,
+              "p95_us": 14365.59,
+              "ops_per_sec": 70.7
             },
             "snapshot": {
-              "median_us": 570.5,
-              "mean_us": 643.24,
-              "p95_us": 1027.1,
-              "ops_per_sec": 1554.6
+              "median_us": 487.48,
+              "mean_us": 499.83,
+              "p95_us": 560.3,
+              "ops_per_sec": 2000.7
             },
             "rollback": {
-              "median_us": 395.67,
-              "mean_us": 466.29,
-              "p95_us": 769.97,
-              "ops_per_sec": 2144.6
+              "median_us": 338.54,
+              "mean_us": 343.08,
+              "p95_us": 367.85,
+              "ops_per_sec": 2914.7
             }
           }
         },
         "10-rule": {
           "100b": {
             "read": {
-              "median_us": 104.38,
-              "mean_us": 117.78,
-              "p95_us": 148.92,
-              "ops_per_sec": 8490.4
+              "median_us": 94.88,
+              "mean_us": 96.75,
+              "p95_us": 104.83,
+              "ops_per_sec": 10335.6
             },
             "write": {
-              "median_us": 68.58,
-              "mean_us": 84.28,
-              "p95_us": 139.58,
-              "ops_per_sec": 11865.2
+              "median_us": 49.79,
+              "mean_us": 45.6,
+              "p95_us": 56.41,
+              "ops_per_sec": 21929.0
             },
             "snapshot": {
-              "median_us": 98.79,
-              "mean_us": 108.51,
-              "p95_us": 152.16,
-              "ops_per_sec": 9215.7
+              "median_us": 91.71,
+              "mean_us": 93.67,
+              "p95_us": 104.82,
+              "ops_per_sec": 10675.4
             },
             "rollback": {
-              "median_us": 132.65,
-              "mean_us": 136.56,
-              "p95_us": 169.65,
-              "ops_per_sec": 7322.6
+              "median_us": 107.12,
+              "mean_us": 109.69,
+              "p95_us": 121.25,
+              "ops_per_sec": 9116.2
             }
           },
           "1kb": {
             "read": {
-              "median_us": 237.5,
-              "mean_us": 253.5,
-              "p95_us": 299.04,
-              "ops_per_sec": 3944.8
+              "median_us": 222.96,
+              "mean_us": 226.65,
+              "p95_us": 261.52,
+              "ops_per_sec": 4412.0
             },
             "write": {
-              "median_us": 182.33,
-              "mean_us": 189.09,
-              "p95_us": 218.78,
-              "ops_per_sec": 5288.6
+              "median_us": 174.17,
+              "mean_us": 174.98,
+              "p95_us": 204.63,
+              "ops_per_sec": 5715.1
             },
             "snapshot": {
-              "median_us": 97.35,
-              "mean_us": 103.5,
-              "p95_us": 135.45,
-              "ops_per_sec": 9661.5
+              "median_us": 96.71,
+              "mean_us": 105.78,
+              "p95_us": 144.14,
+              "ops_per_sec": 9453.5
             },
             "rollback": {
-              "median_us": 115.56,
-              "mean_us": 115.59,
-              "p95_us": 123.25,
-              "ops_per_sec": 8651.0
+              "median_us": 114.27,
+              "mean_us": 115.6,
+              "p95_us": 122.94,
+              "ops_per_sec": 8650.7
             }
           },
           "10kb": {
             "read": {
-              "median_us": 1468.0,
-              "mean_us": 1478.56,
-              "p95_us": 1511.2,
-              "ops_per_sec": 676.3
+              "median_us": 1499.46,
+              "mean_us": 1505.17,
+              "p95_us": 1587.09,
+              "ops_per_sec": 664.4
             },
             "write": {
-              "median_us": 1449.96,
-              "mean_us": 1471.21,
-              "p95_us": 1605.63,
-              "ops_per_sec": 679.7
+              "median_us": 1409.08,
+              "mean_us": 1426.7,
+              "p95_us": 1489.67,
+              "ops_per_sec": 700.9
             },
             "snapshot": {
-              "median_us": 130.62,
-              "mean_us": 135.98,
-              "p95_us": 164.6,
-              "ops_per_sec": 7354.1
+              "median_us": 134.27,
+              "mean_us": 144.9,
+              "p95_us": 201.23,
+              "ops_per_sec": 6901.2
             },
             "rollback": {
-              "median_us": 134.38,
-              "mean_us": 137.26,
-              "p95_us": 151.99,
-              "ops_per_sec": 7285.4
+              "median_us": 140.96,
+              "mean_us": 142.86,
+              "p95_us": 157.38,
+              "ops_per_sec": 7000.0
             }
           },
           "100kb": {
             "read": {
-              "median_us": 14068.79,
-              "mean_us": 14099.75,
-              "p95_us": 14406.31,
-              "ops_per_sec": 70.9
+              "median_us": 14135.79,
+              "mean_us": 14118.08,
+              "p95_us": 14306.18,
+              "ops_per_sec": 70.8
             },
             "write": {
-              "median_us": 14109.92,
-              "mean_us": 14228.52,
-              "p95_us": 14573.69,
-              "ops_per_sec": 70.3
+              "median_us": 14136.5,
+              "mean_us": 14090.65,
+              "p95_us": 14360.35,
+              "ops_per_sec": 71.0
             },
             "snapshot": {
-              "median_us": 506.19,
-              "mean_us": 536.22,
-              "p95_us": 697.78,
-              "ops_per_sec": 1864.9
+              "median_us": 470.1,
+              "mean_us": 493.85,
+              "p95_us": 593.41,
+              "ops_per_sec": 2024.9
             },
             "rollback": {
-              "median_us": 372.96,
-              "mean_us": 387.66,
-              "p95_us": 475.12,
-              "ops_per_sec": 2579.6
+              "median_us": 335.54,
+              "mean_us": 355.38,
+              "p95_us": 432.23,
+              "ops_per_sec": 2813.9
             }
           }
         }
@@ -547,7 +547,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 345.0
+      "latency_us": 303.2
     },
     {
       "category": "injection",
@@ -557,7 +557,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 74.6
+      "latency_us": 67.4
     },
     {
       "category": "injection",
@@ -567,7 +567,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 51.5
+      "latency_us": 47.8
     },
     {
       "category": "injection",
@@ -577,7 +577,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 50.0
+      "latency_us": 46.4
     },
     {
       "category": "injection",
@@ -587,7 +587,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 53.4
+      "latency_us": 50.2
     },
     {
       "category": "injection",
@@ -597,7 +597,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 43.5
+      "latency_us": 40.5
     },
     {
       "category": "injection",
@@ -607,7 +607,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 40.9
+      "latency_us": 37.7
     },
     {
       "category": "injection",
@@ -617,7 +617,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 40.5
+      "latency_us": 38.3
     },
     {
       "category": "injection",
@@ -627,7 +627,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 38.4
+      "latency_us": 36.6
     },
     {
       "category": "injection",
@@ -637,7 +637,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 44.0
+      "latency_us": 40.2
     },
     {
       "category": "injection",
@@ -647,7 +647,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 47.5
+      "latency_us": 41.1
     },
     {
       "category": "injection",
@@ -657,7 +657,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 46.2
+      "latency_us": 42.4
     },
     {
       "category": "injection",
@@ -667,7 +667,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 45.0
+      "latency_us": 41.7
     },
     {
       "category": "injection",
@@ -677,7 +677,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 41.1
+      "latency_us": 37.4
     },
     {
       "category": "injection",
@@ -687,7 +687,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 42.2
+      "latency_us": 41.2
     },
     {
       "category": "injection",
@@ -697,7 +697,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 46.9
+      "latency_us": 43.7
     },
     {
       "category": "injection",
@@ -707,7 +707,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 40.8
+      "latency_us": 37.1
     },
     {
       "category": "injection",
@@ -717,7 +717,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 53.3
+      "latency_us": 48.3
     },
     {
       "category": "injection",
@@ -727,7 +727,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 48.4
+      "latency_us": 44.2
     },
     {
       "category": "injection",
@@ -737,7 +737,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 42.7
+      "latency_us": 39.8
     },
     {
       "category": "leakage",
@@ -747,7 +747,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 37.2
+      "latency_us": 34.0
     },
     {
       "category": "leakage",
@@ -757,7 +757,7 @@
       "actual": "allowed",
       "classification": "FN",
       "action": "allow",
-      "latency_us": 20.7
+      "latency_us": 18.6
     },
     {
       "category": "leakage",
@@ -767,7 +767,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 37.4
+      "latency_us": 33.3
     },
     {
       "category": "leakage",
@@ -777,7 +777,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 35.9
+      "latency_us": 35.4
     },
     {
       "category": "leakage",
@@ -787,7 +787,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 25.2
+      "latency_us": 22.9
     },
     {
       "category": "leakage",
@@ -797,7 +797,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 41.2
+      "latency_us": 38.4
     },
     {
       "category": "leakage",
@@ -807,7 +807,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 34.4
+      "latency_us": 31.5
     },
     {
       "category": "leakage",
@@ -817,7 +817,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 57.9
+      "latency_us": 52.9
     },
     {
       "category": "leakage",
@@ -827,7 +827,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 54.9
+      "latency_us": 50.4
     },
     {
       "category": "leakage",
@@ -837,7 +837,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 34.6
+      "latency_us": 31.7
     },
     {
       "category": "leakage",
@@ -847,7 +847,7 @@
       "actual": "allowed",
       "classification": "FN",
       "action": "allow",
-      "latency_us": 19.8
+      "latency_us": 19.0
     },
     {
       "category": "leakage",
@@ -857,7 +857,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 43.8
+      "latency_us": 41.7
     },
     {
       "category": "leakage",
@@ -867,7 +867,7 @@
       "actual": "allowed",
       "classification": "FN",
       "action": "allow",
-      "latency_us": 15.2
+      "latency_us": 14.8
     },
     {
       "category": "leakage",
@@ -877,7 +877,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "redact",
-      "latency_us": 38.6
+      "latency_us": 36.0
     },
     {
       "category": "tampering",
@@ -887,7 +887,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 30.6
+      "latency_us": 28.0
     },
     {
       "category": "tampering",
@@ -897,7 +897,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 27.7
+      "latency_us": 25.7
     },
     {
       "category": "tampering",
@@ -907,7 +907,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 37.0
+      "latency_us": 44.9
     },
     {
       "category": "tampering",
@@ -917,7 +917,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 32.2
+      "latency_us": 30.0
     },
     {
       "category": "tampering",
@@ -927,7 +927,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 35.5
+      "latency_us": 32.9
     },
     {
       "category": "tampering",
@@ -937,7 +937,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 25.8
+      "latency_us": 23.0
     },
     {
       "category": "tampering",
@@ -947,7 +947,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 27.4
+      "latency_us": 24.2
     },
     {
       "category": "tampering",
@@ -957,7 +957,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 35.3
+      "latency_us": 33.0
     },
     {
       "category": "tampering",
@@ -967,7 +967,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 26.0
+      "latency_us": 23.5
     },
     {
       "category": "tampering",
@@ -977,7 +977,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 34.3
+      "latency_us": 31.8
     },
     {
       "category": "tampering",
@@ -987,7 +987,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 24.7
+      "latency_us": 22.9
     },
     {
       "category": "tampering",
@@ -997,7 +997,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "block",
-      "latency_us": 26.9
+      "latency_us": 24.5
     },
     {
       "category": "churn",
@@ -1007,7 +1007,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 254.7
+      "latency_us": 215.2
     },
     {
       "category": "churn",
@@ -1017,7 +1017,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 237.8
+      "latency_us": 199.6
     },
     {
       "category": "churn",
@@ -1027,7 +1027,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 213.9
+      "latency_us": 194.0
     },
     {
       "category": "churn",
@@ -1037,7 +1037,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 197.9
+      "latency_us": 186.8
     },
     {
       "category": "churn",
@@ -1047,7 +1047,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 208.0
+      "latency_us": 194.0
     },
     {
       "category": "churn",
@@ -1057,7 +1057,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 207.7
+      "latency_us": 192.1
     },
     {
       "category": "churn",
@@ -1067,7 +1067,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 207.0
+      "latency_us": 251.8
     },
     {
       "category": "churn",
@@ -1077,7 +1077,7 @@
       "actual": "detected",
       "classification": "TP",
       "action": "quarantine",
-      "latency_us": 220.8
+      "latency_us": 226.0
     },
     {
       "category": "benign",
@@ -1087,7 +1087,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 26.0
+      "latency_us": 24.9
     },
     {
       "category": "benign",
@@ -1097,7 +1097,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 22.5
+      "latency_us": 22.1
     },
     {
       "category": "benign",
@@ -1107,7 +1107,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 19.4
+      "latency_us": 19.2
     },
     {
       "category": "benign",
@@ -1127,7 +1127,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 31.8
+      "latency_us": 31.6
     },
     {
       "category": "benign",
@@ -1137,7 +1137,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 19.0
+      "latency_us": 18.9
     },
     {
       "category": "benign",
@@ -1147,7 +1147,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 23.4
+      "latency_us": 22.9
     },
     {
       "category": "benign",
@@ -1157,7 +1157,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 24.5
+      "latency_us": 25.1
     },
     {
       "category": "benign",
@@ -1167,7 +1167,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 31.5
+      "latency_us": 32.2
     },
     {
       "category": "benign",
@@ -1177,7 +1177,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 26.5
+      "latency_us": 26.1
     },
     {
       "category": "benign",
@@ -1187,7 +1187,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 28.2
+      "latency_us": 27.8
     },
     {
       "category": "benign",
@@ -1197,7 +1197,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 31.4
+      "latency_us": 33.5
     },
     {
       "category": "benign",
@@ -1207,7 +1207,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 23.9
+      "latency_us": 24.4
     },
     {
       "category": "benign",
@@ -1217,7 +1217,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 24.4
+      "latency_us": 47.8
     },
     {
       "category": "benign",
@@ -1227,7 +1227,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 26.3
+      "latency_us": 52.6
     },
     {
       "category": "benign",
@@ -1237,7 +1237,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 31.0
+      "latency_us": 43.7
     },
     {
       "category": "benign",
@@ -1247,7 +1247,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 22.8
+      "latency_us": 25.9
     },
     {
       "category": "benign",
@@ -1257,7 +1257,7 @@
       "actual": "allowed",
       "classification": "TN",
       "action": "allow",
-      "latency_us": 51.8
+      "latency_us": 54.5
     }
   ]
 }
