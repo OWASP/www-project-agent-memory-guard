@@ -62,7 +62,8 @@ free to disclose on your own timeline.
 
 - Detector false positives — report as a normal issue
 - Missing detection of an attack class we do not claim to cover. Our published recall is
-  92.5% on a 55-case corpus; the corpus is small and project-authored, and we say so.
+  94.4% on a 72-case corpus (54 attack payloads, 18 benign controls); the corpus is small
+  and project-authored, and we say so.
   A payload we simply do not detect is a feature request unless we claimed to detect it
 - Findings against the deliberately vulnerable fixtures in `semgrep/`, `examples/`, and
   the self-test workflows
