@@ -21,6 +21,7 @@ from agent_memory_guard.identity import AgentHandle
 from agent_memory_guard.policies.access import AccessDecision, AccessPolicy, AccessRule
 from agent_memory_guard.policies.policy import Policy
 from agent_memory_guard.trace import TraceStep, format_trace
+from agent_memory_guard.write_gates import PendingWrite, PendingWriteError, WriteGateRule
 
 __version__ = "0.4.0"
 
@@ -56,4 +57,7 @@ __all__ = [
     "UnknownPrincipal",
     "format_trace",
     "__version__",
+    "PendingWrite",
+    "PendingWriteError",
+    "WriteGateRule",
 ]

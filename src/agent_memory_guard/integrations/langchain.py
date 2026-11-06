@@ -78,7 +78,7 @@ class GuardedChatMessageHistory(BaseChatMessageHistory):  # type: ignore[misc, v
             if self._drop_blocked:
                 return
             raise
-        if decision == Action.QUARANTINE:
+        if decision not in (Action.ALLOW, Action.REDACT):
             return
         self.guard.write(self._index_key, count + 1, source="langchain")
 

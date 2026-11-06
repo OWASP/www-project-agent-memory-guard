@@ -133,6 +133,13 @@ guard = MemoryGuard(
 )
 ```
 
+## Write approval and corroboration
+
+Use [write gates](../write-gates.md) to hold writes to selected keys until a
+trusted host approves the exact proposal or attests enough independent sources.
+These rules apply to benign content too and are separate from detector actions.
+Pending content is not committed or forwarded by the built-in adapters.
+
 ## API server settings
 
 `amg serve` takes `--host` (default `127.0.0.1`), `--port` (default `8000`) and
