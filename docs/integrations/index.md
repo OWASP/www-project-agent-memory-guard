@@ -10,6 +10,7 @@ Agent Memory Guard provides drop-in integrations for popular AI agent frameworks
 | [CrewAI](crewai.md) | Callback handler | `crewai` |
 | [LlamaIndex](llamaindex.md) | Guarded chat store | `llamaindex` |
 | [GitHub Actions](github-actions.md) | CI/CD action | (none) |
+| [deja-vu](https://github.com/vshulcz/deja-vu) | Cross-agent transcript recall screen (`examples/deja_vu_recall_guard.py`) | (none) |
 
 ## Installation
 
