@@ -88,16 +88,22 @@ class MLInjectionDetector:
         """
         if self._device != "auto":
             return self._device
+
         try:
             import torch
-        except ImportError:
+
+            if torch.cuda.is_available():
+                return "cuda"
+
+            mps = getattr(torch.backends, "mps", None)
+            if mps is not None and mps.is_available():
+                return "mps"
+
+        except Exception:
             return -1
-        if torch.cuda.is_available():
-            return "cuda"
-        mps = getattr(torch.backends, "mps", None)
-        if mps is not None and mps.is_available():
-            return "mps"
+
         return -1
+
 
     def _load_model(self) -> bool:
         """Load the classification pipeline."""

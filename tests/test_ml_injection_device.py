@@ -78,6 +78,41 @@ def test_auto_without_torch_falls_back_to_cpu(monkeypatch):
     assert [device for _, device in calls] == [-1]
 
 
+def test_auto_when_torch_import_raises_oserror_falls_back_to_cpu(monkeypatch):
+    original_import = __import__
+
+    def raise_oserror(name, *args, **kwargs):
+        if name == "torch":
+            raise OSError("broken torch installation")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", raise_oserror)
+    calls = install_fake_transformers(monkeypatch)
+
+    MLInjectionDetector(device="auto", lazy_load=False)
+
+    assert [device for _, device in calls] == [-1]
+
+
+def test_auto_when_cuda_check_raises_falls_back_to_cpu(monkeypatch):
+    torch = types.ModuleType("torch")
+
+    def raise_oserror():
+        raise OSError("CUDA initialization failed")
+
+    torch.cuda = types.SimpleNamespace(is_available=raise_oserror)
+    torch.backends = types.SimpleNamespace(
+        mps=types.SimpleNamespace(is_available=lambda: True)
+    )
+    monkeypatch.setitem(sys.modules, "torch", torch)
+
+    calls = install_fake_transformers(monkeypatch)
+
+    MLInjectionDetector(device="auto", lazy_load=False)
+
+    assert [device for _, device in calls] == [-1]
+
+
 @pytest.mark.parametrize("device", ["cpu", "cuda", "mps"])
 def test_explicit_device_is_passed_through_unchanged(monkeypatch, device):
     # Even if torch says CUDA is available, an explicit choice is respected.
