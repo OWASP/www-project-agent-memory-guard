@@ -213,10 +213,10 @@ class Policy:
         - ``permissions.*`` — block ``prompt_injection`` and ``sensitive_data``;
           also listed in ``protected_keys``.
         - ``policies.*`` — block ``prompt_injection``; also in ``protected_keys``.
-        - ``facts.*`` — quarantine ``prompt_injection`` and ``size_anomaly``;
-          also in ``protected_keys``.
-        - ``preferences.*`` — redact ``sensitive_data``;
-          also in ``protected_keys``.
+        - ``facts.*`` — writable; quarantine ``prompt_injection`` and
+          ``size_anomaly``; not in ``protected_keys``.
+        - ``preferences.*`` — redact ``sensitive_data``; writable and not
+          in ``protected_keys``.
         - ``tool_results.*`` — block ``prompt_injection``,
           quarantine ``size_anomaly``.
         - ``scratch.*`` — quarantine ``size_anomaly``.
@@ -234,8 +234,7 @@ class Policy:
                 "credentials.*",
                 "permissions.*",
                 "policies.*",
-                "facts.*",
-            ),  # preferences.*, tool_results.* and scratch.* are writable by design
+            ),  # facts.*, preferences.*, tool_results.* and scratch.* are writable by design
             rules=[
                 # credentials.* — locked, block
                 PolicyRule(
