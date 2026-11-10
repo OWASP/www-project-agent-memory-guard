@@ -67,6 +67,8 @@ class GuardedSessionMemory:
         if decision == Action.QUARANTINE:
             self.hitl.enqueue(key=key, value=output, reason="quarantined")
             return False
+        if decision not in (Action.ALLOW, Action.REDACT):
+            return False
         # Persist the (possibly redacted) committed value, not the raw input.
         committed = self.guard.read(key, sink="openai_agents")
         self._scratch[key] = committed
