@@ -14,6 +14,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `Policy.strict()` and `Policy.tiered()` now have rules for the `ml_injection` detector.
+  Until now a guard that registered `MLInjectionDetector` with either preset recorded the
+  detection and still allowed the write, because neither preset had a rule for it.
+  `strict()` blocks `ml_injection` findings, and `tiered()` gives them the same action as
+  `prompt_injection` in every namespace (block in `credentials.*`, `permissions.*`,
+  `policies.*` and `tool_results.*`, quarantine in `facts.*`, block elsewhere). Guards
+  that do not register `MLInjectionDetector` are unaffected. If you registered it and relied
+  on the old allow behaviour, add your own rule for `ml_injection` or use a custom policy.
+
 ### Fixed
 
 - Corrected the published median-latency figure from 59 µs to 62 µs in the README, the
