@@ -29,6 +29,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Package metadata lists both authors by name in `authors`. Because setuptools moves an
   author who has an email address into `Author-email`, PyPI's Author field showed only
   the co-leader. Vaishnavi Gudur remains the maintainer contact.
+- `Policy.tiered()` no longer lists `facts.*` in `protected_keys`. `facts.*` is the
+  writable namespace whose content findings are quarantined for review, but the
+  protected-key membership made `ProtectedKeyDetector` block every write there before
+  the facts rules ran, so `quarantine_fact_injection` and `quarantine_fact_anomaly`
+  could never fire and no finding was recorded for those keys. Benign writes to
+  `facts.*` are now committed, and injected or oversized values are quarantined. The
+  namespace is no longer write-protected or delete-protected; to keep it read-only,
+  add `facts.*` back to `protected_keys` in a custom policy.
 
 ### Security
 
