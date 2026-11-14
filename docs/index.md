@@ -16,7 +16,7 @@ AI agents that use persistent memory (conversation history, tool results, user p
 AMG addresses this by providing:
 
 - **10 specialized detectors** covering prompt injection, data leakage, privilege escalation, tool abuse, excessive autonomy, cross-task contamination, and more
-- **ML-powered detection** using fine-tuned DistilBERT for advanced injection patterns
+- **ML-powered detection** using a fine-tuned DeBERTa-v3 classifier for advanced injection patterns
 - **Policy engine** with permissive, strict, and tiered enforcement modes
 - **Drop-in integrations** for LangChain, CrewAI, LlamaIndex, and AutoGen
 - **CLI scanner** for CI/CD pipeline integration
@@ -50,7 +50,7 @@ For additional features:
 # REST API server
 pip install agent-memory-guard[server]
 
-# ML-based detection (DistilBERT)
+# ML-based detection (DeBERTa-v3)
 pip install agent-memory-guard[ml]
 
 # Framework integrations
