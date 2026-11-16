@@ -195,6 +195,11 @@ class Policy:
                 PolicyRule("block_protected_key", "protected_key", Action.BLOCK),
                 PolicyRule("quarantine_size_anomaly", "size_anomaly", Action.QUARANTINE),
                 PolicyRule("quarantine_rapid_change", "rapid_change", Action.QUARANTINE),
+                PolicyRule(
+                    "quarantine_untrusted_directive",
+                    "untrusted_standing_directive",
+                    Action.QUARANTINE,
+                ),
             ],
         )
 

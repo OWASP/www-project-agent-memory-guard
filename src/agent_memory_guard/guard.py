@@ -29,6 +29,7 @@ from agent_memory_guard.detectors.injection import (
 from agent_memory_guard.detectors.leakage import SensitiveDataDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
 from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
+from agent_memory_guard.detectors.standing_directive import UntrustedStandingDirectiveDetector
 from agent_memory_guard.events import Action, SecurityEvent, Severity, SourceClass, SourceType
 from agent_memory_guard.exceptions import (
     AccessDenied,
@@ -146,6 +147,7 @@ class MemoryGuard:
             self._classification, current_task=current_task
         )
         self._self_reinforcement_detector = SelfReinforcementDetector()
+        self._standing_directive_detector = UntrustedStandingDirectiveDetector()
 
         if detectors is None:
             self._detectors: list[Detector] = [
@@ -156,6 +158,7 @@ class MemoryGuard:
                 self._protected_detector,
                 self._cross_task_detector,
                 self._self_reinforcement_detector,
+                self._standing_directive_detector,
             ]
         else:
             self._detectors = list(detectors)
@@ -176,6 +179,14 @@ class MemoryGuard:
                 # and `note_independent_write` operate on the detector that
                 # actually runs.
                 self._self_reinforcement_detector = user_self_reinf
+            # A caller-supplied UntrustedStandingDirectiveDetector gets the
+            # write's source class too; none is added if the caller left it out.
+            user_directive = next(
+                (d for d in self._detectors if isinstance(d, UntrustedStandingDirectiveDetector)),
+                None,
+            )
+            if user_directive is not None:
+                self._standing_directive_detector = user_directive
 
         for key in list(self._store.keys()):
             if self._policy.is_immutable(key):
@@ -833,10 +844,12 @@ class MemoryGuard:
 
         committed_value = value
         self._self_reinforcement_detector._pending_source_class = normalised_source_class
+        self._standing_directive_detector._pending_source_class = normalised_source_class
         try:
             verdicts = self._run_detectors(key, value, operation="write")
         finally:
             self._self_reinforcement_detector._pending_source_class = SourceClass.UNKNOWN
+            self._standing_directive_detector._pending_source_class = SourceClass.UNKNOWN
         worst = _highest_severity(verdicts)
         redacting: list[DetectionResult] = []
         decision = self._decide(verdicts, key=key, redacting=redacting)
