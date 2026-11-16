@@ -232,9 +232,10 @@ def test_trace_of_a_content_block_shows_each_detector_and_the_snapshot():
         g.as_agent("researcher").write("team.web", INJECTION)
     steps = g.last_trace()
     detectors = {s.detail: s.outcome for s in steps if s.stage == "detector"}
-    assert len(detectors) == 7
+    assert len(detectors) == 8
     assert detectors["prompt_injection"] == "high"
     assert detectors["sensitive_data"] == "clear"
+    assert detectors["untrusted_standing_directive"] == "clear"
     assert TraceStep("policy", "prompt_injection/high", "rule block_injection -> block") in steps
     assert TraceStep("decision", "most severe action wins", "block") in steps
     assert stages(steps)[-3:] == ["event", "snapshot", "result"]

@@ -18,6 +18,7 @@ from agent_memory_guard.detectors.memory_persistence_injection import (
 from agent_memory_guard.detectors.privilege_escalation import PrivilegeEscalationDetector
 from agent_memory_guard.detectors.protected_keys import ProtectedKeyDetector
 from agent_memory_guard.detectors.self_reinforcement import SelfReinforcementDetector
+from agent_memory_guard.detectors.standing_directive import UntrustedStandingDirectiveDetector
 from agent_memory_guard.detectors.tool_abuse import ToolAbuseDetector
 
 try:
@@ -38,6 +39,7 @@ __all__ = [
     "ProtectedKeyDetector",
     "CrossTaskContaminationDetector",
     "SelfReinforcementDetector",
+    "UntrustedStandingDirectiveDetector",
     "ToolAbuseDetector",
     "PrivilegeEscalationDetector",
     "ExcessiveAutonomyDetector",

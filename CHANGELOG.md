@@ -14,6 +14,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Quiet poisoning from untrusted sources.** A new detector,
+  `UntrustedStandingDirectiveDetector` (`untrusted_standing_directive`), flags writes
+  from an untrusted source that would act as standing instructions in later sessions:
+  "from now on", "always recommend", "whenever the user asks", "the user trusts ...
+  without asking", or a "new payment address". Content checks miss these because they
+  read like ordinary preferences; they are only suspicious because a tool result or a
+  web page wrote them. The guard passes the detector each write's resolved source
+  class, and it reports only when that class is `EXTERNAL_TOOL` (which
+  `SourceType.TOOL_OUTPUT` maps to). Unlabelled writes (`UNKNOWN`) and writes from the
+  user, the system or the agent are not flagged, so existing callers see no change.
+  `Policy.strict()` quarantines these findings; permissive policies record them as
+  events. It is on by default; label tool and retrieval output as `EXTERNAL_TOOL` to
+  get the protection.
+
 ### Fixed
 
 - Corrected the published median-latency figure from 59 µs to 62 µs in the README, the
