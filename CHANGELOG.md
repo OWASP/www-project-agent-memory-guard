@@ -14,6 +14,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `MLInjectionDetector(device="auto")` now picks a device when the model is loaded: CUDA
+  if available, otherwise MPS, otherwise CPU. Previously `"auto"` always ran on the CPU.
+  The fallback model uses the same device and the chosen device is logged at `INFO`
+  level. The default stays `"cpu"`, so existing setups are unchanged. (issue #183)
+
 ### Fixed
 
 - Corrected the published median-latency figure from 59 µs to 62 µs in the README, the

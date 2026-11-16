@@ -62,9 +62,23 @@ guard = MemoryGuard(
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `threshold` | 0.85 | Confidence threshold for flagging (0.0–1.0) |
-| `model_name` | `distilbert-base-uncased` | Hugging Face model identifier |
-| `device` | auto | `cpu`, `cuda`, or `mps` |
+| `model_name` | `protectai/deberta-v3-base-prompt-injection-v2` | Hugging Face model identifier |
+| `device` | `cpu` | `cpu`, `cuda`, `mps`, or `auto`. `auto` picks CUDA if available, then MPS, then CPU, when the model loads (needs `torch`; see below) |
 | `max_length` | 512 | Maximum token length for input |
+
+### Choosing a device
+
+By default the detector runs on the CPU. Set `device="auto"` to use a GPU when there is one:
+
+```python
+detector = MLInjectionDetector(device="auto")
+```
+
+When the model is loaded, `auto` picks the first available option: CUDA, then MPS
+(Apple Silicon), then CPU. This needs `torch`, which the `[ml]` extra installs; without
+it, `auto` uses the CPU. The device that was picked is logged at `INFO` level on the
+`agent_memory_guard.ml` logger. If the default model cannot be loaded, the fallback model
+runs on the same device. An explicit `cpu`, `cuda` or `mps` is always used as given.
 
 ## Performance
 

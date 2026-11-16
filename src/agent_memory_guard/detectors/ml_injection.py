@@ -43,7 +43,11 @@ class MLInjectionDetector:
     threshold : float
         Classification threshold (0.0-1.0). Higher = fewer false positives.
     device : str
-        Device for inference: "cpu", "cuda", or "auto".
+        Device for inference: "cpu", "cuda", "mps", or "auto". With "auto",
+        the device is chosen when the model is loaded: CUDA if available,
+        otherwise MPS (Apple Silicon) if available, otherwise CPU. This needs
+        ``torch`` (installed by the ``[ml]`` extra); without it, "auto" uses CPU.
+        The default stays "cpu".
     max_length : int
         Maximum token length for input text.
     severity : Severity
@@ -75,10 +79,40 @@ class MLInjectionDetector:
         if not lazy_load:
             self._load_model()
 
+    def _resolve_device(self) -> Any:
+        """Return the ``device`` argument to give to ``transformers.pipeline``.
+
+        An explicit device is returned unchanged. ``"auto"`` becomes ``"cuda"``,
+        ``"mps"`` or ``-1`` (CPU), depending on what ``torch`` reports. ``torch``
+        is imported here, not at module level, so importing this module stays cheap.
+        """
+        if self._device != "auto":
+            return self._device
+
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                return "cuda"
+
+            mps = getattr(torch.backends, "mps", None)
+            if mps is not None and mps.is_available():
+                return "mps"
+
+        except Exception:
+            return -1
+
+        return -1
+
+
     def _load_model(self) -> bool:
         """Load the classification pipeline."""
         if self._pipeline is not None:
             return True
+
+        # Resolved once; the fallback model below reuses the same device.
+        device = self._resolve_device()
+        device_label = "cpu" if device == -1 else device
 
         try:
             from transformers import pipeline as hf_pipeline
@@ -86,11 +120,11 @@ class MLInjectionDetector:
             self._pipeline = hf_pipeline(
                 "text-classification",
                 model=self._model_name,
-                device=self._device if self._device != "auto" else -1,
+                device=device,
                 truncation=True,
                 max_length=self._max_length,
             )
-            log.info(f"Loaded ML injection model: {self._model_name}")
+            log.info(f"Loaded ML injection model: {self._model_name} on {device_label}")
             return True
         except ImportError:
             log.warning(
@@ -108,11 +142,11 @@ class MLInjectionDetector:
                 self._pipeline = hf_pipeline(
                     "text-classification",
                     model=FALLBACK_MODEL,
-                    device=self._device if self._device != "auto" else -1,
+                    device=device,
                     truncation=True,
                     max_length=self._max_length,
                 )
-                log.info(f"Loaded fallback ML model: {FALLBACK_MODEL}")
+                log.info(f"Loaded fallback ML model: {FALLBACK_MODEL} on {device_label}")
                 return True
             except Exception as e2:
                 log.warning(f"Fallback model also failed: {e2}")
