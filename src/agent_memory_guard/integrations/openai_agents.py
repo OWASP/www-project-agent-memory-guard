@@ -37,7 +37,7 @@ class GuardedAgentContext:
             if self._drop_blocked:
                 return False
             raise
-        if decision == Action.QUARANTINE:
+        if decision not in (Action.ALLOW, Action.REDACT):
             return False
         if hasattr(self._context, "set_state"):
             committed = self.guard.read(full_key, sink="openai_agents")
@@ -77,7 +77,7 @@ class GuardedToolOutput:
             if self._drop_blocked:
                 return False
             raise
-        return decision != Action.QUARANTINE
+        return decision in (Action.ALLOW, Action.REDACT)
 
 
 class GuardedHandoff:

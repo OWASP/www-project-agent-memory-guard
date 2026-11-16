@@ -13,7 +13,6 @@ from typing import Any, Literal
 
 from agent_memory_guard import MemoryGuard, Policy, PolicyViolation, SourceClass
 from agent_memory_guard.storage import InMemoryStore
-
 from autogen_agent_memory_guard.exceptions import MemoryGuardViolation
 
 logger = logging.getLogger(__name__)
@@ -102,7 +101,7 @@ class MemoryGuardHook:
 
         start = time.perf_counter_ns()
         try:
-            self._guard.write(
+            decision = self._guard.write(
                 key,
                 content,
                 source=sender,
@@ -112,6 +111,15 @@ class MemoryGuardHook:
 
             if self._enable_metrics:
                 self._total_latency_us += latency_us
+
+            if decision.value in ("require_approval", "require_corroboration"):
+                # Keep pending content out of every forwarding mode and error text.
+                raise MemoryGuardViolation(
+                    message_content="",
+                    violation_type=decision.value,
+                    sender=sender,
+                    details={"pending": True},
+                )
 
             return ScanResult(
                 allowed=True,

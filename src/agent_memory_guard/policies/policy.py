@@ -37,8 +37,9 @@ import yaml
 from agent_memory_guard.events import Action, Severity
 from agent_memory_guard.exceptions import PolicyWarning
 from agent_memory_guard.policies.access import AccessPolicy, AccessRule
+from agent_memory_guard.write_gates import GATE_ACTIONS, WriteGateRule
 
-_VALID_ACTIONS = {a.value for a in Action}
+_VALID_ACTIONS = {a.value for a in Action if a not in GATE_ACTIONS}
 
 # Detector whose events are gated on the policy's protected/immutable key lists.
 _PROTECTED_KEY_DETECTOR = "protected_key"
@@ -51,6 +52,10 @@ class PolicyRule:
     action: Action
     min_severity: Severity = Severity.LOW
     keys: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.action in GATE_ACTIONS:
+            raise ValueError("Use write_gates for write-only approval/corroboration rules")
 
     def applies_to(self, detector: str, severity: Severity, key: str) -> bool:
         if self.on != "*" and self.on != detector:
@@ -92,10 +97,24 @@ class Policy:
     rules: list[PolicyRule] = field(default_factory=list)
     version: int = 1
     access: AccessPolicy | None = None
+    write_gates: tuple[WriteGateRule, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.default_action in GATE_ACTIONS:
+            raise ValueError("Use write_gates for write-only approval/corroboration rules")
         self.protected_keys = _key_patterns("protected_keys", self.protected_keys)
         self.immutable_keys = _key_patterns("immutable_keys", self.immutable_keys)
+        self.write_gates = tuple(self.write_gates)
+        if any(not isinstance(rule, WriteGateRule) for rule in self.write_gates):
+            raise ValueError("write_gates must contain WriteGateRule objects")
+        names = [rule.name for rule in self.write_gates]
+        if len(names) != len(set(names)):
+            raise ValueError("Write gate names must be unique")
+
+    def write_gate(self, key: str) -> WriteGateRule | None:
+        """Find the first write gate matching a key, independently of findings."""
+        return next((rule for rule in self.write_gates
+                     if any(fnmatch.fnmatchcase(key, pattern) for pattern in rule.keys)), None)
 
     def is_immutable(self, key: str) -> bool:
         """True if `key` matches any ``immutable_keys`` glob.
@@ -171,6 +190,7 @@ class Policy:
             protected_keys=protected_keys,
             immutable_keys=immutable_keys,
             rules=rules,
+            write_gates=tuple(_parse_write_gate(rule) for rule in data.get("write_gates", ())),
         )
 
     @classmethod
@@ -322,11 +342,24 @@ class Policy:
 
 def _parse_action(value: Any) -> Action:
     if isinstance(value, Action):
-        return value
+        if value not in GATE_ACTIONS:
+            return value
+        raise ValueError("Use write_gates for write-only approval/corroboration rules")
     text = str(value).lower()
     if text not in _VALID_ACTIONS:
         raise ValueError(f"Unknown policy action: {value!r}")
     return Action(text)
+
+
+def _parse_write_gate(raw: Any) -> WriteGateRule:
+    if not isinstance(raw, Mapping):
+        raise ValueError("Each write gate must be a mapping")
+    known = {"name", "keys", "action", "corroborations", "trusted_source_classes", "ttl_seconds"}
+    if set(raw) - known:
+        raise ValueError("Unknown write gate field(s): " + ", ".join(str(k) for k in set(raw) - known))
+    if "name" not in raw or "keys" not in raw:
+        raise ValueError("A write gate needs name and keys")
+    return WriteGateRule(**dict(raw))
 
 
 def _parse_rule(raw: dict[str | bool, Any]) -> PolicyRule:
@@ -450,7 +483,7 @@ def _check_key_rules_have_keys(
         )
 
 
-_KNOWN_TOP_FIELDS = {"version", "default_action", "protected_keys", "immutable_keys", "rules"}
+_KNOWN_TOP_FIELDS = {"version", "default_action", "protected_keys", "immutable_keys", "rules", "write_gates"}
 _KNOWN_RULE_FIELDS = {"name", "on", True, "action", "min_severity", "keys"}
 # Fields that can only mean per-agent permissions. 0.3 silently dropped them,
 # which let every agent through, so they are now an error, in any letter case.

@@ -83,7 +83,7 @@ class GuardedMemoryManager(MemoryManager):  # type: ignore[misc, valid-type]
     def _upsert_db_memory(self, memory: UserMemory) -> str:  # type: ignore[override]
         screened = self._screen(memory)
         if screened is None:
-            # Blocked or quarantined: skip the database write entirely.
+            # Uncommitted: skip the database write entirely.
             return getattr(memory, "memory_id", None) or ""
         return super()._upsert_db_memory(memory=screened)  # type: ignore[misc,no-any-return]
 
@@ -103,7 +103,7 @@ class GuardedMemoryManager(MemoryManager):  # type: ignore[misc, valid-type]
             if self._drop_blocked:
                 return None
             raise
-        if action == Action.QUARANTINE:
+        if action not in (Action.ALLOW, Action.REDACT):
             return None
         if action == Action.REDACT:
             committed = self.guard._store.get(key)  # noqa: SLF001 - committed (redacted) value

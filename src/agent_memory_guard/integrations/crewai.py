@@ -54,7 +54,7 @@ class GuardedMemory:
             if self._drop_blocked:
                 return False
             raise
-        if decision == Action.QUARANTINE:
+        if decision not in (Action.ALLOW, Action.REDACT):
             return False
         self._owned_keys.add(key)
         # Write-through to underlying memory
@@ -98,12 +98,13 @@ class GuardedMemory:
             screened = []
             for r in results:
                 try:
-                    self.guard.write(
+                    decision = self.guard.write(
                         f"crewai.{self.agent_id}.search_result",
                         str(r),
                         source="crewai",
                     )
-                    screened.append(r)
+                    if decision in (Action.ALLOW, Action.REDACT):
+                        screened.append(r)
                 except PolicyViolation:
                     continue
             return screened

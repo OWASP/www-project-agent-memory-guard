@@ -21,6 +21,8 @@ class Action(str, Enum):
     REDACT = "redact"
     BLOCK = "block"
     QUARANTINE = "quarantine"
+    REQUIRE_APPROVAL = "require_approval"
+    REQUIRE_CORROBORATION = "require_corroboration"
 
 
 class SourceType(str, Enum):
