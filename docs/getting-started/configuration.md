@@ -18,7 +18,7 @@ guard = MemoryGuard(
 | Preset | What it does |
 |--------|--------------|
 | `Policy.permissive()` | Allows every write and records findings as events (detect and log). |
-| `Policy.strict()` | Blocks prompt injection and writes to `identity.*`, `system.*` and `agent.goal`; redacts secrets and PII; quarantines size and rapid-change anomalies. |
+| `Policy.strict()` | Blocks prompt injection (including `ml_injection` findings, when the ML detector is registered) and writes to `identity.*`, `system.*` and `agent.goal`; redacts secrets and PII; quarantines size and rapid-change anomalies. |
 | `Policy.tiered()` | Per-namespace rules: `credentials.*` and `permissions.*` are locked down, `facts.*` findings are quarantined for review, `preferences.*` are redacted, `tool_results.*` and `scratch.*` stay writable. |
 
 ## Policy files (YAML)
