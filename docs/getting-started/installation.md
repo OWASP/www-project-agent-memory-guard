@@ -23,7 +23,7 @@ AMG uses optional dependency groups to keep the core package lightweight. Instal
 # REST API server (FastAPI + Uvicorn)
 pip install agent-memory-guard[server]
 
-# ML-based detection (DistilBERT via Hugging Face Transformers)
+# ML-based detection (DeBERTa-v3 via Hugging Face Transformers)
 pip install agent-memory-guard[ml]
 
 # LangChain integration
