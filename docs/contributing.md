@@ -63,24 +63,27 @@ src/agent_memory_guard/
 ## Adding a New Detector
 
 1. Create a new file in `src/agent_memory_guard/detectors/`
-2. Implement the `Detector` interface:
+2. Implement the `Detector` protocol (a `name` attribute and an `inspect` method that returns a `DetectionResult`):
 
 ```python
-from agent_memory_guard.detectors.base import Detector, DetectionResult
+from typing import Any
 
-class MyNewDetector(Detector):
+from agent_memory_guard.detectors.base import DetectionResult
+from agent_memory_guard.events import Severity
+
+class MyNewDetector:
     name = "MyNewDetector"
 
-    def detect(self, key: str, value: any, **context) -> DetectionResult:
+    def inspect(self, key: str, value: Any, *, operation: str) -> DetectionResult:
         # Your detection logic here
-        if is_threat(value):
+        if looks_malicious(value):
             return DetectionResult(
-                is_threat=True,
                 detector=self.name,
-                severity="high",
+                matched=True,
+                severity=Severity.HIGH,
                 message="Description of what was detected",
             )
-        return DetectionResult(is_threat=False, detector=self.name)
+        return DetectionResult(detector=self.name, matched=False)
 ```
 
 3. Register in `src/agent_memory_guard/detectors/__init__.py`
